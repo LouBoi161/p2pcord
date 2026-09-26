@@ -245,16 +245,25 @@ ipcMain.on('app:info', (evt) => {
     name: productName,
     storage: flags.storage ? path.basename(flags.storage) : null,
     platform: process.platform,
+    wayland: isWayland,
     debug: !app.isPackaged && !!process.env.P2PCORD_DEBUG_PORT
   }
 })
 
 // Screen share: the renderer lists sources, the user picks one, then
 // getDisplayMedia() resolves to the picked source.
+// On Wayland every source enumeration opens the system (portal) picker and a
+// picked source can only be used once, so there the portal is the only picker
+// and it is asked exactly once, inside the display-media handler.
+const isWayland = isLinux && (process.env.XDG_SESSION_TYPE === 'wayland' || !!process.env.WAYLAND_DISPLAY)
+
 let pickedSource = null
+let listedSources = new Map() // id -> source from the last in-app picker listing
 
 ipcMain.handle('screen:sources', async () => {
+  if (isWayland) return []
   const sources = await desktopCapturer.getSources({ types: ['screen', 'window'], thumbnailSize: { width: 320, height: 180 }, fetchWindowIcons: false })
+  listedSources = new Map(sources.map((s) => [s.id, s]))
   return sources.map((s) => ({ id: s.id, name: s.name, thumbnail: s.thumbnail.isEmpty() ? null : s.thumbnail.toDataURL() }))
 })
 
@@ -316,9 +325,14 @@ function setupSession () {
 
   ses.setDisplayMediaRequestHandler(async (request, callback) => {
     try {
-      const sources = await desktopCapturer.getSources({ types: ['screen', 'window'] })
-      const source = sources.find((s) => s.id === pickedSource) || (isLinux ? sources[0] : null)
+      let source = pickedSource ? listedSources.get(pickedSource) : null
       pickedSource = null
+      listedSources = new Map()
+      if (!source && isWayland) {
+        // opens the GNOME/KDE portal picker; the user's choice comes back as the only source
+        const sources = await desktopCapturer.getSources({ types: ['screen', 'window'] })
+        source = sources[0] || null
+      }
       if (!source) return callback({})
       callback({ video: source, audio: isWindows ? 'loopback' : undefined })
     } catch (err) {

@@ -13,6 +13,7 @@
     startCamera,
     stopCamera,
     stopScreen,
+    startScreen,
     setVolume
   } from '../lib/voice/call.svelte'
 
@@ -67,6 +68,7 @@
 
   function pickScreen () {
     if (voice.screen) stopScreen()
+    else if (window.p2p.info().wayland) startScreen(null) // the system portal shows its own picker
     else ui.dialog = { type: 'screen' }
   }
 

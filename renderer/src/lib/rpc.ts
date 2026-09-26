@@ -7,7 +7,7 @@ export interface ScreenSource {
 }
 
 interface Bridge {
-  info(): { version: string; name: string; storage: string | null; platform: string; debug: boolean }
+  info(): { version: string; name: string; storage: string | null; platform: string; wayland: boolean; debug: boolean }
   start(): Promise<boolean>
   send(bytes: Uint8Array): Promise<boolean>
   onMessage(listener: (bytes: Uint8Array) => void): () => void

@@ -441,7 +441,7 @@ export async function startScreen (sourceId: string | null) {
     await window.p2p.selectScreen(sourceId)
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: { width: { max: preset.width }, height: { max: preset.height }, frameRate: { ideal: preset.frameRate, max: preset.frameRate } },
-      audio: true
+      audio: window.p2p.info().platform === 'win32' // system audio capture is Windows-only
     })
     const track = stream.getVideoTracks()[0]
     track.contentHint = preset.frameRate >= 60 ? 'motion' : 'detail'
