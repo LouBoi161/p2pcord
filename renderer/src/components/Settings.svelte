@@ -111,8 +111,9 @@
     saveSettings()
   }
 
-  let pct = $derived(Math.max(0, Math.min(100, ((level + 90) / 90) * 100)))
-  let thresholdPct = $derived(((settings.vadThreshold + 90) / 90) * 100)
+  // Meter and sensitivity slider share one dB scale, so the handle sits exactly on the level
+  const METER_MIN = -90
+  let pct = $derived(Math.max(0, Math.min(100, ((level - METER_MIN) / -METER_MIN) * 100)))
 </script>
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && !capturing && onclose()} />
@@ -196,7 +197,7 @@
         </label>
 
         <div class="field">
-          <span>Mikrofontest</span>
+          <span>{settings.inputMode === 'vad' ? `Mikrofontest · Empfindlichkeit ${settings.vadThreshold} dB` : 'Mikrofontest'}</span>
           <div class="test">
             {#if voice.active}
               <p class="hint">Du bist gerade in einem Anruf – der Pegel zeigt dein Live-Mikrofon.</p>
@@ -205,12 +206,33 @@
             {:else}
               <button class="btn" onclick={startTest}>Mikrofon testen</button>
             {/if}
-            <div class="meter">
-              <div class="fill" style="width:{pct}%" class:open={level > settings.vadThreshold}></div>
-              {#if settings.inputMode === 'vad'}<div class="threshold" style="left:{thresholdPct}%"></div>{/if}
+            <div class="meter-wrap">
+              <div class="meter">
+                <div class="fill" style="width:{pct}%" class:open={settings.inputMode === 'ptt' || level > settings.vadThreshold}></div>
+              </div>
+              {#if settings.inputMode === 'vad'}
+                <input
+                  class="sensitivity"
+                  type="range"
+                  min={METER_MIN}
+                  max="0"
+                  step="1"
+                  aria-label="Empfindlichkeit"
+                  title="Empfindlichkeit: ziehen"
+                  bind:value={settings.vadThreshold}
+                  onchange={() => saveSettings()}
+                />
+              {/if}
             </div>
           </div>
-          {#if testing}<p class="hint">Du hörst dich selbst so, wie deine Freunde dich hören (mit Rauschfilter). Kopfhörer benutzen!</p>{/if}
+          <p class="hint">
+            {#if settings.inputMode === 'vad'}
+              Zieh den weißen Regler: Was rechts davon liegt (grün), wird übertragen. Stell ihn knapp über dein Grundrauschen, wenn du still bist.
+            {:else}
+              Push-to-Talk ist aktiv – übertragen wird nur, solange du die Taste hältst.
+            {/if}
+            {#if testing} Du hörst dich selbst so, wie deine Freunde dich hören (mit Rauschfilter) – Kopfhörer benutzen!{/if}
+          </p>
         </div>
 
         <h2>Rauschunterdrückung</h2>
@@ -248,10 +270,7 @@
           </button>
         </div>
         {#if settings.inputMode === 'vad'}
-          <label class="field">
-            <span>Empfindlichkeit · {settings.vadThreshold} dB</span>
-            <input type="range" min="-80" max="-20" step="1" bind:value={settings.vadThreshold} onchange={() => saveSettings()} />
-          </label>
+          <p class="hint">Die Empfindlichkeit stellst du oben direkt am Pegel des Mikrofontests ein.</p>
         {:else}
           <div class="field">
             <span>Taste</span>
@@ -474,13 +493,50 @@
     align-items: center;
     gap: 16px;
   }
+  .meter-wrap {
+    position: relative;
+    flex: 1;
+    height: 26px;
+    display: flex;
+    align-items: center;
+  }
   .meter {
     position: relative;
     flex: 1;
-    height: 10px;
-    border-radius: 5px;
+    height: 12px;
+    border-radius: 6px;
     background: var(--bg-rail);
     overflow: hidden;
+  }
+  .sensitivity {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    background: transparent;
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: ew-resize;
+  }
+  .sensitivity::-webkit-slider-runnable-track {
+    height: 26px;
+    background: transparent;
+  }
+  .sensitivity::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 8px;
+    height: 26px;
+    border-radius: 3px;
+    background: #fff;
+    box-shadow:
+      0 0 0 2px var(--bg-main),
+      0 1px 4px rgba(0, 0, 0, 0.5);
+  }
+  .sensitivity:focus-visible::-webkit-slider-thumb {
+    box-shadow:
+      0 0 0 2px var(--bg-main),
+      0 0 0 4px var(--accent);
   }
   .fill {
     height: 100%;
@@ -489,13 +545,6 @@
   }
   .fill.open {
     background: var(--green);
-  }
-  .threshold {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    background: #fff;
   }
   .options {
     display: flex;
