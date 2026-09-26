@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte'
+  import Logo from './Logo.svelte'
   import { ui, groups, dms, openView, spaceUnread } from '../lib/state.svelte'
   import { voice } from '../lib/voice/call.svelte'
 
@@ -19,7 +20,7 @@
   <div class="item" class:active={ui.view === 'home'}>
     <span class="pill" class:unread={homeUnread && ui.view !== 'home'}></span>
     <button class="icon home" title="Direktnachrichten" onclick={() => openView('home')}>
-      <Icon name="chat" size={24} />
+      <Logo size={26} glyph />
     </button>
   </div>
 
@@ -107,6 +108,13 @@
     border-radius: 16px;
     background: var(--accent);
     color: #fff;
+  }
+  .icon.home {
+    --logo-cut: var(--bg-main);
+  }
+  .item:hover .icon.home,
+  .item.active .icon.home {
+    --logo-cut: var(--accent);
   }
   .icon.add {
     color: var(--green);

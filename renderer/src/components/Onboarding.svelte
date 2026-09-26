@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte'
+  import Logo from './Logo.svelte'
   import { setName, toast, errorText } from '../lib/state.svelte'
 
   let name = $state('')
@@ -20,7 +21,7 @@
 
 <div class="onboarding">
   <div class="card">
-    <div class="logo"><Icon name="chat" size={36} /></div>
+    <div class="logo"><Logo size={72} /></div>
     <h1>Willkommen bei P2Pcord</h1>
     <p>Voice, Video und Chat mit deinen Freunden – ohne Server, ohne Account, Ende-zu-Ende verschlüsselt.</p>
     <label class="field">
@@ -58,11 +59,6 @@
     flex-direction: column;
   }
   .logo {
-    width: 64px;
-    height: 64px;
-    border-radius: 20px;
-    background: var(--accent);
-    color: #fff;
     display: grid;
     place-items: center;
     margin: 0 auto 16px;

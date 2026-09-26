@@ -6,6 +6,7 @@
   import Dialogs from './components/Dialogs.svelte'
   import Onboarding from './components/Onboarding.svelte'
   import Icon from './components/Icon.svelte'
+  import Logo from './components/Logo.svelte'
   import { ui, boot, setSoundPlayer } from './lib/state.svelte'
   import Avatar from './components/Avatar.svelte'
   import { voice, initVoice, acceptCall, declineCall } from './lib/voice/call.svelte'
@@ -29,7 +30,7 @@
 <div class="app">
   {#if ui.status === 'loading'}
     <div class="splash">
-      <div class="logo"><Icon name="chat" size={40} /></div>
+      <Logo size={80} />
       <span class="spinner"></span>
       <p>Verbinde mit dem P2P-Netz…</p>
     </div>
