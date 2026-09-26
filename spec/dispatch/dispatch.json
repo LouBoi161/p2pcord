@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "offset": 0,
+  "schema": [
+    {
+      "id": 0,
+      "name": "@p2pcord/set-info",
+      "requestType": "@p2pcord/info",
+      "version": 1
+    },
+    {
+      "id": 1,
+      "name": "@p2pcord/add-member",
+      "requestType": "@p2pcord/member",
+      "version": 1
+    },
+    {
+      "id": 2,
+      "name": "@p2pcord/remove-member",
+      "requestType": "@p2pcord/member-ref",
+      "version": 1
+    },
+    {
+      "id": 3,
+      "name": "@p2pcord/set-role",
+      "requestType": "@p2pcord/member-role",
+      "version": 1
+    },
+    {
+      "id": 4,
+      "name": "@p2pcord/set-name",
+      "requestType": "@p2pcord/member-name",
+      "version": 1
+    },
+    {
+      "id": 5,
+      "name": "@p2pcord/add-channel",
+      "requestType": "@p2pcord/channel",
+      "version": 1
+    },
+    {
+      "id": 6,
+      "name": "@p2pcord/remove-channel",
+      "requestType": "@p2pcord/channel-ref",
+      "version": 1
+    },
+    {
+      "id": 7,
+      "name": "@p2pcord/add-invite",
+      "requestType": "@p2pcord/invite",
+      "version": 1
+    },
+    {
+      "id": 8,
+      "name": "@p2pcord/use-invite",
+      "requestType": "@p2pcord/invite-ref",
+      "version": 1
+    },
+    {
+      "id": 9,
+      "name": "@p2pcord/remove-invite",
+      "requestType": "@p2pcord/invite-ref",
+      "version": 1
+    },
+    {
+      "id": 10,
+      "name": "@p2pcord/add-message",
+      "requestType": "@p2pcord/message",
+      "version": 1
+    },
+    {
+      "id": 11,
+      "name": "@p2pcord/edit-message",
+      "requestType": "@p2pcord/message-edit",
+      "version": 1
+    },
+    {
+      "id": 12,
+      "name": "@p2pcord/remove-message",
+      "requestType": "@p2pcord/message-ref",
+      "version": 1
+    }
+  ]
+}

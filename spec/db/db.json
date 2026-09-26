@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "offset": 0,
+  "schema": [
+    {
+      "name": "info",
+      "namespace": "p2pcord",
+      "id": 0,
+      "type": 1,
+      "version": 1,
+      "versionField": null,
+      "indexes": [],
+      "schema": "@p2pcord/info",
+      "derived": false,
+      "key": [
+        "id"
+      ],
+      "trigger": null
+    },
+    {
+      "name": "members",
+      "namespace": "p2pcord",
+      "id": 1,
+      "type": 1,
+      "version": 1,
+      "versionField": null,
+      "indexes": [],
+      "schema": "@p2pcord/member",
+      "derived": false,
+      "key": [
+        "writer"
+      ],
+      "trigger": null
+    },
+    {
+      "name": "channels",
+      "namespace": "p2pcord",
+      "id": 2,
+      "type": 1,
+      "version": 1,
+      "versionField": null,
+      "indexes": [],
+      "schema": "@p2pcord/channel",
+      "derived": false,
+      "key": [
+        "id"
+      ],
+      "trigger": null
+    },
+    {
+      "name": "invites",
+      "namespace": "p2pcord",
+      "id": 3,
+      "type": 1,
+      "version": 1,
+      "versionField": null,
+      "indexes": [],
+      "schema": "@p2pcord/invite",
+      "derived": false,
+      "key": [
+        "id"
+      ],
+      "trigger": null
+    },
+    {
+      "name": "messages",
+      "namespace": "p2pcord",
+      "id": 4,
+      "type": 1,
+      "version": 1,
+      "versionField": null,
+      "indexes": [],
+      "schema": "@p2pcord/message",
+      "derived": false,
+      "key": [
+        "channel",
+        "id"
+      ],
+      "trigger": null
+    }
+  ]
+}
