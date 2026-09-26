@@ -18,7 +18,8 @@ schema.register({
     { name: 'id', type: 'string', required: true },
     { name: 'name', type: 'string', required: true },
     { name: 'kind', type: 'uint', required: true }, // 0 = group, 1 = dm
-    { name: 'created', type: 'uint', required: true }
+    { name: 'created', type: 'uint', required: true },
+    { name: 'root', type: 'buffer' } // key of the first base of this group (stable id across key rotations)
   ]
 })
 
@@ -77,7 +78,8 @@ schema.register({
     { name: 'expires', type: 'uint', required: true }, // ms epoch, 0 = never
     { name: 'maxUses', type: 'uint', required: true }, // 0 = unlimited
     { name: 'uses', type: 'uint', required: true },
-    { name: 'createdBy', type: 'buffer', required: true }
+    { name: 'createdBy', type: 'buffer', required: true },
+    { name: 'restricted', type: 'bool' } // only identities listed as migrants may use it
   ]
 })
 
@@ -132,6 +134,35 @@ schema.register({
   ]
 })
 
+// Key rotation: the old base points to its successor and holds, per remaining
+// member, an invite to the successor sealed to that member's identity key.
+schema.register({
+  name: 'successor',
+  fields: [
+    { name: 'id', type: 'string', required: true },
+    { name: 'ref', type: 'buffer', required: true } // hash of the successor base key
+  ]
+})
+
+schema.register({
+  name: 'rekey',
+  fields: [
+    { name: 'to', type: 'buffer', required: true }, // identity key
+    { name: 'ref', type: 'buffer', required: true },
+    { name: 'box', type: 'buffer', required: true } // crypto_box_seal(invite)
+  ]
+})
+
+// In the successor base: who may move over, with which role
+schema.register({
+  name: 'migrant',
+  fields: [
+    { name: 'identity', type: 'buffer', required: true },
+    { name: 'role', type: 'uint', required: true },
+    { name: 'name', type: 'string', required: true }
+  ]
+})
+
 Hyperschema.toDisk(hyperSchema)
 
 const hyperdb = HyperdbBuilder.from(SCHEMA_DIR, DB_DIR)
@@ -141,6 +172,9 @@ db.collections.register({ name: 'members', schema: '@p2pcord/member', key: ['wri
 db.collections.register({ name: 'channels', schema: '@p2pcord/channel', key: ['id'] })
 db.collections.register({ name: 'invites', schema: '@p2pcord/invite', key: ['id'] })
 db.collections.register({ name: 'messages', schema: '@p2pcord/message', key: ['channel', 'id'] })
+db.collections.register({ name: 'successor', schema: '@p2pcord/successor', key: ['id'] })
+db.collections.register({ name: 'rekeys', schema: '@p2pcord/rekey', key: ['to'] })
+db.collections.register({ name: 'migrants', schema: '@p2pcord/migrant', key: ['identity'] })
 HyperdbBuilder.toDisk(hyperdb)
 
 const hyperdispatch = Hyperdispatch.from(SCHEMA_DIR, DISPATCH_DIR, { offset: 0 })
@@ -159,4 +193,7 @@ dispatch.register({ name: 'remove-invite', requestType: '@p2pcord/invite-ref' })
 dispatch.register({ name: 'add-message', requestType: '@p2pcord/message' })
 dispatch.register({ name: 'edit-message', requestType: '@p2pcord/message-edit' })
 dispatch.register({ name: 'remove-message', requestType: '@p2pcord/message-ref' })
+dispatch.register({ name: 'set-successor', requestType: '@p2pcord/successor' })
+dispatch.register({ name: 'add-rekey', requestType: '@p2pcord/rekey' })
+dispatch.register({ name: 'add-migrant', requestType: '@p2pcord/migrant' })
 Hyperdispatch.toDisk(hyperdispatch)

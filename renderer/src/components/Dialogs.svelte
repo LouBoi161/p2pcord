@@ -179,6 +179,37 @@
   })
 
   // ---- members ----
+  function kick (identity: string, name: string) {
+    if (!space) return
+    const id = space.id
+    ui.dialog = {
+      type: 'confirm',
+      title: `${name} entfernen`,
+      text: `${name} wird aus der Gruppe entfernt. Dabei bekommt die Gruppe neue Schlüssel: Alle anderen ziehen automatisch mit um, ${name} kann ab jetzt nichts mehr mitlesen. Was ${name} bisher gesehen hat, bleibt bei ${name}.`,
+      danger: true,
+      action: 'Entfernen',
+      run: async () => {
+        await call('kick', { id, identity })
+        toast(`${name} wurde entfernt, neue Gruppenschlüssel sind verteilt.`)
+      }
+    }
+  }
+
+  function rotate () {
+    if (!space) return
+    const id = space.id
+    ui.dialog = {
+      type: 'confirm',
+      title: 'Gruppenschlüssel erneuern',
+      text: 'Die Gruppe bekommt neue Schlüssel und alle aktuellen Mitglieder ziehen automatisch mit um. Sinnvoll, nachdem jemand die Gruppe verlassen hat oder ein Gerät verloren ging. Der bisherige Verlauf bleibt lesbar.',
+      action: 'Erneuern',
+      run: async () => {
+        await call('rotate', { id })
+        toast('Neue Gruppenschlüssel sind verteilt.')
+      }
+    }
+  }
+
   const roleName = (r: number) => (r === ROLE_OWNER ? 'Besitzer' : r === ROLE_ADMIN ? 'Admin' : 'Mitglied')
 
   async function doLeave () {
@@ -323,11 +354,17 @@
             </button>
           {/if}
           {#if space.role >= ROLE_ADMIN && m.role < space.role && m.identity !== ui.me}
-            <button class="btn small danger" onclick={() => call('kick', { id: space.id, identity: m.identity })}>Entfernen</button>
+            <button class="btn small danger" onclick={() => kick(m.identity, m.name)}>Entfernen</button>
           {/if}
         </div>
       {/each}
     </div>
+    {#if space.role >= ROLE_ADMIN}
+      <div class="rotate-row">
+        <span class="hint">Nach einem Austritt oder verlorenem Gerät:</span>
+        <button class="btn small secondary" onclick={rotate}><Icon name="key" size={14} /> Gruppenschlüssel erneuern</button>
+      </div>
+    {/if}
   </Modal>
 {:else if d?.type === 'leave' && space}
   <Modal title={`${space.name} verlassen`} onclose={close}>
@@ -494,6 +531,15 @@
     font-size: 12px;
     color: var(--text-muted);
     font-family: var(--mono);
+  }
+  .rotate-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 8px 8px;
+    border-top: 1px solid var(--border-soft);
+    margin-bottom: 8px;
   }
   .center {
     text-align: center;

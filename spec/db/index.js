@@ -4,7 +4,7 @@
 const { IndexEncoder, c, b4a } = require('hyperdb/runtime')
 const { version, getEncoding, setVersion } = require('./messages.js')
 
-const versions = { schema: version, db: 1 }
+const versions = { schema: version, db: 2 }
 
 // '@p2pcord/info' collection key
 const collection0_key = new IndexEncoder([
@@ -353,12 +353,216 @@ const collection4 = {
   decodedVersion: 0
 }
 
+// '@p2pcord/successor' collection key
+const collection5_key = new IndexEncoder([
+  IndexEncoder.STRING
+], { prefix: 5 })
+
+function collection5_indexify (record) {
+  const a = record.id
+  return a === undefined ? [] : [a]
+}
+
+// '@p2pcord/successor' value encoding
+const collection5_enc = getEncoding('@p2pcord/successor/hyperdb#5')
+
+// '@p2pcord/successor' reconstruction function
+function collection5_reconstruct (schemaVersion, keyBuf, valueBuf) {
+  const key = collection5_key.decode(keyBuf)
+  setVersion(schemaVersion)
+  const state = { start: 0, end: valueBuf.byteLength, buffer: valueBuf }
+  const type = c.uint.decode(state)
+  if (type !== 0) throw new Error('Unknown collection type: ' + type)
+  collection5.decodedVersion = c.uint.decode(state)
+  const record = collection5_enc.decode(state)
+  record.id = key[0]
+  return record
+}
+// '@p2pcord/successor' key reconstruction function
+function collection5_reconstruct_key (keyBuf) {
+  const key = collection5_key.decode(keyBuf)
+  return {
+    id: key[0]
+  }
+}
+
+// '@p2pcord/successor'
+const collection5 = {
+  name: '@p2pcord/successor',
+  id: 5,
+  version: 2,
+  encodeKey (record) {
+    const key = [record.id]
+    return collection5_key.encode(key)
+  },
+  encodeKeyRange ({ gt, lt, gte, lte } = {}) {
+    return collection5_key.encodeRange({
+      gt: gt ? collection5_indexify(gt) : null,
+      lt: lt ? collection5_indexify(lt) : null,
+      gte: gte ? collection5_indexify(gte) : null,
+      lte: lte ? collection5_indexify(lte) : null
+    })
+  },
+  encodeValue (schemaVersion, collectionVersion, record) {
+    setVersion(schemaVersion)
+    const state = { start: 0, end: 2, buffer: null }
+    collection5_enc.preencode(state, record)
+    state.buffer = b4a.allocUnsafe(state.end)
+    state.buffer[state.start++] = 0
+    state.buffer[state.start++] = collectionVersion
+    collection5_enc.encode(state, record)
+    return state.buffer
+  },
+  trigger: null,
+  reconstruct: collection5_reconstruct,
+  reconstructKey: collection5_reconstruct_key,
+  indexes: [],
+  decodedVersion: 0
+}
+
+// '@p2pcord/rekeys' collection key
+const collection6_key = new IndexEncoder([
+  IndexEncoder.BUFFER
+], { prefix: 6 })
+
+function collection6_indexify (record) {
+  const a = record.to
+  return a === undefined ? [] : [a]
+}
+
+// '@p2pcord/rekeys' value encoding
+const collection6_enc = getEncoding('@p2pcord/rekey/hyperdb#6')
+
+// '@p2pcord/rekeys' reconstruction function
+function collection6_reconstruct (schemaVersion, keyBuf, valueBuf) {
+  const key = collection6_key.decode(keyBuf)
+  setVersion(schemaVersion)
+  const state = { start: 0, end: valueBuf.byteLength, buffer: valueBuf }
+  const type = c.uint.decode(state)
+  if (type !== 0) throw new Error('Unknown collection type: ' + type)
+  collection6.decodedVersion = c.uint.decode(state)
+  const record = collection6_enc.decode(state)
+  record.to = key[0]
+  return record
+}
+// '@p2pcord/rekeys' key reconstruction function
+function collection6_reconstruct_key (keyBuf) {
+  const key = collection6_key.decode(keyBuf)
+  return {
+    to: key[0]
+  }
+}
+
+// '@p2pcord/rekeys'
+const collection6 = {
+  name: '@p2pcord/rekeys',
+  id: 6,
+  version: 2,
+  encodeKey (record) {
+    const key = [record.to]
+    return collection6_key.encode(key)
+  },
+  encodeKeyRange ({ gt, lt, gte, lte } = {}) {
+    return collection6_key.encodeRange({
+      gt: gt ? collection6_indexify(gt) : null,
+      lt: lt ? collection6_indexify(lt) : null,
+      gte: gte ? collection6_indexify(gte) : null,
+      lte: lte ? collection6_indexify(lte) : null
+    })
+  },
+  encodeValue (schemaVersion, collectionVersion, record) {
+    setVersion(schemaVersion)
+    const state = { start: 0, end: 2, buffer: null }
+    collection6_enc.preencode(state, record)
+    state.buffer = b4a.allocUnsafe(state.end)
+    state.buffer[state.start++] = 0
+    state.buffer[state.start++] = collectionVersion
+    collection6_enc.encode(state, record)
+    return state.buffer
+  },
+  trigger: null,
+  reconstruct: collection6_reconstruct,
+  reconstructKey: collection6_reconstruct_key,
+  indexes: [],
+  decodedVersion: 0
+}
+
+// '@p2pcord/migrants' collection key
+const collection7_key = new IndexEncoder([
+  IndexEncoder.BUFFER
+], { prefix: 7 })
+
+function collection7_indexify (record) {
+  const a = record.identity
+  return a === undefined ? [] : [a]
+}
+
+// '@p2pcord/migrants' value encoding
+const collection7_enc = getEncoding('@p2pcord/migrant/hyperdb#7')
+
+// '@p2pcord/migrants' reconstruction function
+function collection7_reconstruct (schemaVersion, keyBuf, valueBuf) {
+  const key = collection7_key.decode(keyBuf)
+  setVersion(schemaVersion)
+  const state = { start: 0, end: valueBuf.byteLength, buffer: valueBuf }
+  const type = c.uint.decode(state)
+  if (type !== 0) throw new Error('Unknown collection type: ' + type)
+  collection7.decodedVersion = c.uint.decode(state)
+  const record = collection7_enc.decode(state)
+  record.identity = key[0]
+  return record
+}
+// '@p2pcord/migrants' key reconstruction function
+function collection7_reconstruct_key (keyBuf) {
+  const key = collection7_key.decode(keyBuf)
+  return {
+    identity: key[0]
+  }
+}
+
+// '@p2pcord/migrants'
+const collection7 = {
+  name: '@p2pcord/migrants',
+  id: 7,
+  version: 2,
+  encodeKey (record) {
+    const key = [record.identity]
+    return collection7_key.encode(key)
+  },
+  encodeKeyRange ({ gt, lt, gte, lte } = {}) {
+    return collection7_key.encodeRange({
+      gt: gt ? collection7_indexify(gt) : null,
+      lt: lt ? collection7_indexify(lt) : null,
+      gte: gte ? collection7_indexify(gte) : null,
+      lte: lte ? collection7_indexify(lte) : null
+    })
+  },
+  encodeValue (schemaVersion, collectionVersion, record) {
+    setVersion(schemaVersion)
+    const state = { start: 0, end: 2, buffer: null }
+    collection7_enc.preencode(state, record)
+    state.buffer = b4a.allocUnsafe(state.end)
+    state.buffer[state.start++] = 0
+    state.buffer[state.start++] = collectionVersion
+    collection7_enc.encode(state, record)
+    return state.buffer
+  },
+  trigger: null,
+  reconstruct: collection7_reconstruct,
+  reconstructKey: collection7_reconstruct_key,
+  indexes: [],
+  decodedVersion: 0
+}
+
 const collections = [
   collection0,
   collection1,
   collection2,
   collection3,
-  collection4
+  collection4,
+  collection5,
+  collection6,
+  collection7
 ]
 
 const indexes = [
@@ -373,6 +577,9 @@ function resolveCollection (name) {
     case '@p2pcord/channels': return collection2
     case '@p2pcord/invites': return collection3
     case '@p2pcord/messages': return collection4
+    case '@p2pcord/successor': return collection5
+    case '@p2pcord/rekeys': return collection6
+    case '@p2pcord/migrants': return collection7
     default: return null
   }
 }

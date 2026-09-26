@@ -163,8 +163,9 @@
           <div class="item"><Icon name="lock" size={20} /><div><strong>Verschlüsselte Verbindungen</strong><p>Jede Verbindung zu einem Peer nutzt das Noise-Protokoll (Hyperswarm) und ist an dessen Schlüssel gebunden.</p></div></div>
           <div class="item"><Icon name="shield" size={20} /><div><strong>Verschlüsselte Daten</strong><p>Nachrichten und Dateien einer Gruppe sind mit dem Gruppenschlüssel verschlüsselt. Nur Mitglieder können sie lesen.</p></div></div>
           <div class="item"><Icon name="phone" size={20} /><div><strong>Ende-zu-Ende-Anrufe</strong><p>Audio und Video laufen direkt per WebRTC (DTLS-SRTP). Die Schlüssel werden über die authentifizierte P2P-Verbindung ausgehandelt.</p></div></div>
-          <div class="item"><Icon name="ticket" size={20} /><div><strong>Blind Pairing</strong><p>Einladungscodes enthalten keine Schlüssel und lassen sich auf eine Nutzung und eine Ablaufzeit begrenzen.</p></div></div>
-          <div class="item warn"><Icon name="signal" size={20} /><div><strong>Gut zu wissen</strong><p>Wie bei jeder P2P-App sehen verbundene Peers deine IP-Adresse. Wer aus einer Gruppe entfernt wird, behält, was er bereits empfangen hat.</p></div></div>
+          <div class="item"><Icon name="ticket" size={20} /><div><strong>Blind Pairing</strong><p>Einladungscodes enthalten keine Schlüssel, gelten standardmäßig für eine Person und 24 Stunden.</p></div></div>
+          <div class="item"><Icon name="users" size={20} /><div><strong>Neue Schlüssel beim Entfernen</strong><p>Wird jemand aus einer Gruppe entfernt, bekommt die Gruppe automatisch neue Schlüssel. Die entfernte Person kann danach nichts mehr mitlesen, behält aber, was sie bis dahin empfangen hat.</p></div></div>
+          <div class="item warn"><Icon name="signal" size={20} /><div><strong>Gut zu wissen</strong><p>Wie bei jeder P2P-App sehen verbundene Peers deine IP-Adresse. Nachrichten sind signiert – wer sie hat, kann belegen, von wem sie stammen.</p></div></div>
         </div>
       {:else if current === 'voice'}
         <h1>Sprache & Video</h1>

@@ -8,7 +8,8 @@ TeamSpeak. Läuft komplett Peer-to-Peer auf dem [Holepunch/Pear-Stack](https://d
 
 - **Gruppen** mit Text- und Sprachkanälen, Rollen (Besitzer/Admin/Mitglied), Kicken
 - **Freunde & Direktnachrichten** (1:1) inkl. Anrufen mit Klingeln/Annehmen/Ablehnen
-- **Einladungscodes** (Blind Pairing): einmalig oder mehrfach, mit Ablaufzeit
+- **Einladungscodes** (Blind Pairing): standardmäßig 1 Person / 24 h, ersetzte Codes werden widerrufen
+- **Schlüsselrotation**: Wer entfernt wird, ist wirklich draußen – die Gruppe zieht automatisch auf neue Schlüssel um
 - **Nachrichten**: Antworten, Bearbeiten, Löschen, Markdown-Light (`**fett**`, `*kursiv*`,
   `` `code` ``, Codeblöcke, `||Spoiler||`), Links mit Sicherheitsabfrage
 - **Dateien, Bilder, Videos** bis 2 GB: Einfügen, Drag & Drop, Vorschau, Video mit Spulen
@@ -45,10 +46,17 @@ Renderer (Svelte, sandboxed)  ──IPC──  Electron main (dünne Hülle)  �
   (Ablauf, Nutzungen, DM max. 2 Personen) und die Signatur des Beitretenden.
 - **Anrufe**: DTLS-SRTP direkt zwischen den Peers. SDP/Fingerprints laufen über den authentifizierten
   Hyperswarm-Kanal → kein Man-in-the-Middle möglich, kein Signaling-Server.
+- **Entfernen = neue Schlüssel**: Beim Kick legt der Admin eine Nachfolge-Base mit neuem Schlüssel an
+  (gleiche Kanäle, Rollen, stabile Gruppen-ID). Jedes verbleibende Mitglied bekommt in der alten Base eine
+  Einladung, versiegelt mit `crypto_box_seal` an seinen Identitätsschlüssel; die Einladung ist zusätzlich auf
+  die Mitgliederliste beschränkt. Der alte Verlauf bleibt lesbar, neue Nachrichten sieht der Gekickte nicht.
+- **Lokale Daten**: Identität, Gruppenliste und Gruppenschlüssel sind mit einem Tresor-Schlüssel versiegelt
+  (XSalsa20-Poly1305), der im System-Schlüsselbund liegt (Electron `safeStorage`). Geöffnete Anhänge werden
+  beim Beenden gelöscht; „Speichern unter…“ legt bewusst eine Kopie ab.
 - **Electron-Härtung**: `sandbox`, `contextIsolation`, strikte CSP, keine Navigation/Popups,
   Anhänge nur als Medien (nie als Dokument), Pfad-Traversal-Schutz.
-- **Grenzen** (bewusst): Peers sehen gegenseitig ihre IP-Adressen. Gekickte Mitglieder behalten bereits
-  empfangene Daten (Schlüsselrotation ist Roadmap). Offline-Nachrichten brauchen, dass irgendein
+- **Grenzen** (bewusst): Peers sehen gegenseitig ihre IP-Adressen. Nachrichten sind signiert, also nicht
+  abstreitbar. Gekickte behalten, was sie bis zum Kick empfangen haben. Offline-Nachrichten brauchen, dass irgendein
   Mitglied online ist. Für Anrufe wird standardmäßig ein öffentlicher STUN-Server nach der eigenen
   Adresse gefragt (nur Adressabfrage, in den Einstellungen änderbar; optional eigener TURN-Server).
 
@@ -94,4 +102,4 @@ Gemessen in der App (Offline-Rendering, saubere Sprache + Störgeräusch aus dem
 - OTA-Updates aktivieren (`pear touch`, Multisig), macOS-Build
 - Globales Push-to-Talk (auch wenn ein Spiel im Vordergrund ist)
 - Optionaler Always-on-Knoten (z. B. Raspberry Pi) für Offline-Nachrichten
-- Schlüsselrotation beim Kicken, Reaktionen, Tipp-Anzeige, Mobile
+- Reaktionen, Tipp-Anzeige, Mobile

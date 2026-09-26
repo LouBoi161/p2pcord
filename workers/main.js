@@ -22,6 +22,7 @@ const METHODS = new Set([
   'removeChannel',
   'setRole',
   'kick',
+  'rotate',
   'listMessages',
   'sendMessage',
   'editMessage',

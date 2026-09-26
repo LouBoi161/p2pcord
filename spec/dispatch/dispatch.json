@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "offset": 0,
   "schema": [
     {
@@ -79,6 +79,24 @@
       "name": "@p2pcord/remove-message",
       "requestType": "@p2pcord/message-ref",
       "version": 1
+    },
+    {
+      "id": 13,
+      "name": "@p2pcord/set-successor",
+      "requestType": "@p2pcord/successor",
+      "version": 2
+    },
+    {
+      "id": 14,
+      "name": "@p2pcord/add-rekey",
+      "requestType": "@p2pcord/rekey",
+      "version": 2
+    },
+    {
+      "id": 15,
+      "name": "@p2pcord/add-migrant",
+      "requestType": "@p2pcord/migrant",
+      "version": 2
     }
   ]
 }

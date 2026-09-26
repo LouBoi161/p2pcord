@@ -38,7 +38,9 @@ class App extends ReadyResource {
     this.identity = null
     this.profile = { name: '' }
     this.registry = [] // [{ id, key, encryptionKey, ns }]
-    this.spaces = new Map() // id -> Space
+    this.spaces = new Map() // stable group id -> current Space
+    this.archives = new Map() // stable group id -> [Space] of rotated-away bases (history)
+    this.migrating = new Map() // stable group id -> Promise of a running key migration
     this.pending = new Map() // code -> Space (joining)
     this.memberCache = new Map() // spaceId -> Set(identityHex)
     this._updateTimers = new Map()
@@ -94,6 +96,7 @@ class App extends ReadyResource {
     for (const t of this._updateTimers.values()) clearTimeout(t)
     for (const space of this.pending.values()) await space.close().catch(noop)
     for (const space of this.spaces.values()) await space.close().catch(noop)
+    for (const list of this.archives.values()) for (const space of list) await space.close().catch(noop)
     await this.pairing.close()
     await this.swarm.destroy()
     await this.store.close()
@@ -164,29 +167,57 @@ class App extends ReadyResource {
   async _openExisting (entry) {
     const space = this._newSpace(entry.ns, {
       key: b4a.from(entry.key, 'hex'),
-      encryptionKey: b4a.from(entry.encryptionKey, 'hex')
+      encryptionKey: b4a.from(entry.encryptionKey, 'hex'),
+      root: entry.id
     })
     await space.ready()
     this._track(space)
+    for (const old of entry.history || []) this._openArchive(entry.id, old).catch((err) => this._warn(err))
+  }
+
+  // Rotated-away bases stay readable (history, attachments) but accept no joins
+  async _openArchive (id, entry) {
+    const space = this._newSpace(entry.ns, {
+      key: b4a.from(entry.key, 'hex'),
+      encryptionKey: b4a.from(entry.encryptionKey, 'hex'),
+      root: id
+    })
+    await space.ready()
+    await space.archive()
+    this._addArchive(id, space)
+  }
+
+  _addArchive (id, space) {
+    const list = this.archives.get(id) || []
+    list.push(space)
+    this.archives.set(id, list)
   }
 
   _track (space) {
     this.spaces.set(space.id, space)
-    space.on('update', () => this._scheduleUpdate(space))
+    space.on('update', () => {
+      this._scheduleUpdate(space)
+      this._checkRekey(space)
+    })
     space.on('warning', (err) => this._warn(err))
     this._scheduleUpdate(space)
+    this._checkRekey(space)
   }
 
+  // Debounced per group; always reports the group's *current* base, so an update
+  // queued for a base that was just rotated away still delivers the new state
   _scheduleUpdate (space) {
-    if (this._updateTimers.has(space.id)) return
-    this._updateTimers.set(space.id, setTimeout(async () => {
-      this._updateTimers.delete(space.id)
-      if (space.closing) return
+    const id = space.id
+    if (this._updateTimers.has(id)) return
+    this._updateTimers.set(id, setTimeout(async () => {
+      this._updateTimers.delete(id)
+      const current = this.spaces.get(id)
+      if (!current || current.closing) return
       try {
-        const state = await space.getState()
-        this.memberCache.set(space.id, new Set(state.members.map((m) => m.identity)))
+        const state = await current.getState()
+        this.memberCache.set(id, new Set(state.members.map((m) => m.identity)))
         this.send('space', state)
-        if (state.role === -1 && state.members.length > 0) this.send('space:removed', { id: space.id })
+        if (state.role === -1 && state.members.length > 0) this.send('space:removed', { id })
       } catch (err) {
         this._warn(err)
       }
@@ -203,10 +234,94 @@ class App extends ReadyResource {
       id: space.id,
       ns,
       key: b4a.toString(space.key, 'hex'),
-      encryptionKey: b4a.toString(space.encryptionKey, 'hex')
+      encryptionKey: b4a.toString(space.encryptionKey, 'hex'),
+      history: []
     })
     await this._saveRegistry()
     this._track(space)
+  }
+
+  // ---- key rotation ----
+
+  // Replaces the current base of a group by its successor; the old one becomes history
+  async _switchBase (id, next, ns) {
+    const entry = this.registry.find((e) => e.id === id)
+    const old = this.spaces.get(id)
+    entry.history = [{ ns: entry.ns, key: entry.key, encryptionKey: entry.encryptionKey }, ...(entry.history || [])]
+    entry.ns = ns
+    entry.key = b4a.toString(next.key, 'hex')
+    entry.encryptionKey = b4a.toString(next.encryptionKey, 'hex')
+    await this._saveRegistry()
+    old.removeAllListeners('update')
+    await old.archive()
+    this._addArchive(id, old)
+    this._track(next)
+  }
+
+  // A member was handed a sealed invite to the successor base: move over
+  _checkRekey (space) {
+    const id = space.id
+    if (this.migrating.has(id) || this.spaces.get(id) !== space || space.closing) return
+    const run = (async () => {
+      const rekey = await space.pendingRekey()
+      if (!rekey) return
+      const ns = b4a.toString(crypto.randomBytes(16), 'hex')
+      const next = this._newSpace(ns, { invite: rekey.invite, root: id })
+      this.pending.set('rekey:' + id, next)
+      try {
+        await next.ready()
+      } catch (err) {
+        await next.close().catch(noop)
+        throw err
+      } finally {
+        this.pending.delete('rekey:' + id)
+      }
+      if (b4a.toString(crypto.hash(next.key), 'hex') !== rekey.ref) {
+        await next.close()
+        throw new Error('REKEY_MISMATCH')
+      }
+      await this._switchBase(id, next, ns)
+    })()
+    this.migrating.set(id, run)
+    run.catch((err) => {
+      this._warn(err)
+      // nobody from the new base online yet: try again later
+      setTimeout(() => this.spaces.get(id) === space && this._checkRekey(space), 30000)
+    }).finally(() => this.migrating.delete(id))
+  }
+
+  // New keys for everyone still in the group; whoever is left out can no longer read along
+  async rotate ({ id }) {
+    const old = this._space(id)
+    const state = await old.getState()
+    if (state.kind !== Space.KIND_GROUP) throw new Error('NOT_A_GROUP')
+    if (state.role < Space.ROLE_ADMIN) throw new Error('NOT_ALLOWED')
+    if (this.migrating.has(id)) await this.migrating.get(id).catch(noop)
+
+    const me = b4a.toString(this.identity.publicKey, 'hex')
+    const others = state.members.filter((m) => m.identity !== me)
+    const ns = b4a.toString(crypto.randomBytes(16), 'hex')
+    const next = this._newSpace(ns, {
+      create: {
+        name: state.name,
+        kind: state.kind,
+        root: b4a.from(id, 'hex'),
+        channels: state.channels.map(({ id, name, kind, position }) => ({ id, name, kind, position })),
+        migrants: others.map((m) => ({ identity: b4a.from(m.identity, 'hex'), role: m.role, name: m.name }))
+      }
+    })
+    await next.ready()
+
+    const invite = await next.createInvite({ maxUses: Math.max(1, others.length), expiresIn: 30 * 24 * 3600 * 1000, restricted: true })
+    const won = await old.announceSuccessor(next.key, invite, others.map((m) => m.identity))
+    if (!won) {
+      // another admin rotated at the same time: follow theirs instead
+      await next.close()
+      this._checkRekey(old)
+      return false
+    }
+    await this._switchBase(id, next, ns)
+    return true
   }
 
   _space (id) {
@@ -288,6 +403,8 @@ class App extends ReadyResource {
     await space.leave().catch(noop)
     await new Promise((resolve) => setTimeout(resolve, 300)) // let the removal replicate briefly
     await space.close()
+    for (const old of this.archives.get(id) || []) await old.close().catch(noop)
+    this.archives.delete(id)
     this.spaces.delete(id)
     this.memberCache.delete(id)
     this.registry = this.registry.filter((e) => e.id !== id)
@@ -323,12 +440,29 @@ class App extends ReadyResource {
     return this._space(id).setRole(identity, role)
   }
 
-  kick ({ id, identity }) {
-    return this._space(id).kick(identity)
+  // Kicking always rotates the group keys, so the removed person is really out
+  async kick ({ id, identity }) {
+    await this._space(id).kick(identity)
+    return this.rotate({ id })
   }
 
-  listMessages ({ id, channel, before, limit }) {
-    return this._space(id).listMessages(channel, { before, limit: Math.min(limit || 50, 200) })
+  // Merges the current base with the history of rotated-away bases
+  async listMessages ({ id, channel, before, limit }) {
+    limit = Math.min(limit || 50, 200)
+    const bases = [this._space(id), ...(this.archives.get(id) || [])]
+    const all = []
+    for (const space of bases) {
+      const list = await space.listMessages(channel, { before, limit })
+      for (const m of list) all.push({ ...m, base: space.baseId })
+    }
+    all.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+    return all.slice(-limit)
+  }
+
+  _baseFor (id, base) {
+    const current = this._space(id)
+    if (!base || current.baseId === base) return current
+    return (this.archives.get(id) || []).find((s) => s.baseId === base) || current
   }
 
   sendMessage ({ id, channel, text, files, replyTo }) {
@@ -363,8 +497,8 @@ class App extends ReadyResource {
 
   // Downloads a file into the local cache and returns its path relative to
   // <storage>/files, which the main process serves to the renderer.
-  async fetchFile ({ id, file }) {
-    const space = this._space(id)
+  async fetchFile ({ id, file, base }) {
+    const space = this._baseFor(id, base)
     const safe = String(file.name || 'datei').replace(/[^\w.\-() ]+/g, '_').slice(-80) || 'datei'
     const rel = path.join(id.slice(0, 16), `${file.core.slice(0, 16)}-${file.blockOffset}-${file.byteLength}-${safe}`)
     const target = path.join(this.storage, 'files', rel)

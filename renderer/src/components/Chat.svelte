@@ -158,7 +158,7 @@
     } else if (e.key === 'Escape') {
       replyTo = null
     } else if (e.key === 'ArrowUp' && !text) {
-      const mine = [...messages].reverse().find((m) => m.author === ui.me && m.text)
+      const mine = [...messages].reverse().find((m) => m.author === ui.me && m.text && current(m))
       if (mine) startEdit(mine)
     }
   }
@@ -234,6 +234,11 @@
     if (!space) return
     const vc = space.channels.find((c) => c.kind === VOICE)
     if (vc) joinVoice(space.id, vc.id)
+  }
+
+  // Messages from before a key rotation are read-only history
+  function current (m: Message) {
+    return !m.base || m.base === space?.baseId
   }
 
   function snippet (id: string | null) {
@@ -334,15 +339,15 @@
               </div>
             {/if}
             {#each m.files as f (f.core + f.blockOffset)}
-              <Attachment space={space.id} file={f} />
+              <Attachment space={space.id} base={m.base} file={f} />
             {/each}
           </div>
           <div class="actions">
             <button title="Antworten" onclick={() => { replyTo = m; input?.focus() }}><Icon name="reply" size={18} /></button>
-            {#if m.author === ui.me && m.text}
+            {#if m.author === ui.me && m.text && current(m)}
               <button title="Bearbeiten" onclick={() => startEdit(m)}><Icon name="edit" size={18} /></button>
             {/if}
-            {#if m.author === ui.me || space.role >= ROLE_ADMIN}
+            {#if current(m) && (m.author === ui.me || space.role >= ROLE_ADMIN)}
               <button title="Löschen" class="danger" onclick={() => remove(m)}><Icon name="trash" size={18} /></button>
             {/if}
           </div>

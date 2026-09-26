@@ -4,7 +4,7 @@
   import { ui, toast, type FileRef } from '../lib/state.svelte'
   import { formatSize } from '../lib/format'
 
-  let { space, file }: { space: string; file: FileRef } = $props()
+  let { space, base, file }: { space: string; base?: string; file: FileRef } = $props()
 
   // Media up to this size is fetched automatically; anything larger waits for a click
   const AUTO_LIMIT = 25 * 1024 * 1024
@@ -23,7 +23,7 @@
     loading = true
     failed = false
     try {
-      const res = await call<{ path: string }>('fetchFile', { id: space, file: $state.snapshot(file) })
+      const res = await call<{ path: string }>('fetchFile', { id: space, base, file: $state.snapshot(file) })
       rel = res.path
       url = 'p2pfile://local/' + res.path.split('/').map(encodeURIComponent).join('/')
       return rel

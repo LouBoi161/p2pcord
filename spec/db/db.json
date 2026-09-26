@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "offset": 0,
   "schema": [
     {
@@ -75,6 +75,51 @@
       "key": [
         "channel",
         "id"
+      ],
+      "trigger": null
+    },
+    {
+      "name": "successor",
+      "namespace": "p2pcord",
+      "id": 5,
+      "type": 1,
+      "version": 2,
+      "versionField": null,
+      "indexes": [],
+      "schema": "@p2pcord/successor",
+      "derived": false,
+      "key": [
+        "id"
+      ],
+      "trigger": null
+    },
+    {
+      "name": "rekeys",
+      "namespace": "p2pcord",
+      "id": 6,
+      "type": 1,
+      "version": 2,
+      "versionField": null,
+      "indexes": [],
+      "schema": "@p2pcord/rekey",
+      "derived": false,
+      "key": [
+        "to"
+      ],
+      "trigger": null
+    },
+    {
+      "name": "migrants",
+      "namespace": "p2pcord",
+      "id": 7,
+      "type": 1,
+      "version": 2,
+      "versionField": null,
+      "indexes": [],
+      "schema": "@p2pcord/migrant",
+      "derived": false,
+      "key": [
+        "identity"
       ],
       "trigger": null
     }

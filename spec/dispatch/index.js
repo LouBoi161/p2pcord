@@ -21,8 +21,11 @@ class Router {
     this._handler10 = null
     this._handler11 = null
     this._handler12 = null
+    this._handler13 = null
+    this._handler14 = null
+    this._handler15 = null
 
-    this._missing = 13
+    this._missing = 16
   }
 
   add (name, handler) {
@@ -66,6 +69,15 @@ class Router {
       case '@p2pcord/remove-message':
         this._handler12 = handler
         break
+      case '@p2pcord/set-successor':
+        this._handler13 = handler
+        break
+      case '@p2pcord/add-rekey':
+        this._handler14 = handler
+        break
+      case '@p2pcord/add-migrant':
+        this._handler15 = handler
+        break
       default:
         throw DispatchError.NONEXISTENT_ROUTE(name)
     }
@@ -86,6 +98,9 @@ class Router {
     assert(this._handler10 !== null, 'Missing handler for "@p2pcord/add-message"')
     assert(this._handler11 !== null, 'Missing handler for "@p2pcord/edit-message"')
     assert(this._handler12 !== null, 'Missing handler for "@p2pcord/remove-message"')
+    assert(this._handler13 !== null, 'Missing handler for "@p2pcord/set-successor"')
+    assert(this._handler14 !== null, 'Missing handler for "@p2pcord/add-rekey"')
+    assert(this._handler15 !== null, 'Missing handler for "@p2pcord/add-migrant"')
   }
 
   async dispatch (message, context) {
@@ -124,6 +139,12 @@ class Router {
         return this._handler11(op.value, context)
       case 12:
         return this._handler12(op.value, context)
+      case 13:
+        return this._handler13(op.value, context)
+      case 14:
+        return this._handler14(op.value, context)
+      case 15:
+        return this._handler15(op.value, context)
       default:
         throw DispatchError.HANDLER_NOT_FOUND_BY_ID(op.id)
     }
@@ -235,6 +256,24 @@ const route12 = {
   enc: getEncoding('@p2pcord/message-ref')
 }
 
+const route13 = {
+  name: '@p2pcord/set-successor',
+  id: 13,
+  enc: getEncoding('@p2pcord/successor')
+}
+
+const route14 = {
+  name: '@p2pcord/add-rekey',
+  id: 14,
+  enc: getEncoding('@p2pcord/rekey')
+}
+
+const route15 = {
+  name: '@p2pcord/add-migrant',
+  id: 15,
+  enc: getEncoding('@p2pcord/migrant')
+}
+
 function getRouteByName (name) {
   switch (name) {
     case '@p2pcord/set-info':
@@ -263,6 +302,12 @@ function getRouteByName (name) {
       return route11
     case '@p2pcord/remove-message':
       return route12
+    case '@p2pcord/set-successor':
+      return route13
+    case '@p2pcord/add-rekey':
+      return route14
+    case '@p2pcord/add-migrant':
+      return route15
     default:
       throw DispatchError.ROUTE_NOT_FOUND_BY_NAME(name)
   }
@@ -296,6 +341,12 @@ function getRouteById (id) {
       return route11
     case 12:
       return route12
+    case 13:
+      return route13
+    case 14:
+      return route14
+    case 15:
+      return route15
     default:
       throw DispatchError.HANDLER_NOT_FOUND_BY_ID(id)
   }

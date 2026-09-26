@@ -10,6 +10,7 @@ const b4a = require('b4a')
 const z32 = require('z32')
 const c = require('compact-encoding')
 
+const { sealTo, openSealed } = require('./seal')
 const Dispatch = require('../spec/dispatch')
 const DB = require('../spec/db')
 
@@ -60,7 +61,8 @@ class Space extends ReadyResource {
    * @param {Buffer} [opts.key] existing base key
    * @param {Buffer} [opts.encryptionKey]
    * @param {string} [opts.invite] z32 invite to join with
-   * @param {{ name: string, kind: number }} [opts.create] create a new space
+   * @param {{ name: string, kind: number, root?: Buffer, channels?: object[], migrants?: object[] }} [opts.create] create a new space
+   * @param {string} [opts.root] stable group id (hex) if already known
    */
   constructor (opts) {
     super()
@@ -74,6 +76,7 @@ class Space extends ReadyResource {
     this.invite = opts.invite || null
     this.createOpts = opts.create || null
     this.blindEncryption = opts.blindEncryption || null
+    this.rootHex = opts.root || null
 
     this.base = null
     this.blobs = null
@@ -95,7 +98,13 @@ class Space extends ReadyResource {
     return this.base.discoveryKey
   }
 
+  // Stable group id: the key of the first base. Survives key rotations.
   get id () {
+    return this.rootHex || this.baseId
+  }
+
+  // Key of this particular base (changes with every key rotation)
+  get baseId () {
     return b4a.toString(this.base.key, 'hex')
   }
 
@@ -153,12 +162,22 @@ class Space extends ReadyResource {
 
     this.view.core.download({ start: 0, end: -1 })
 
+    const info = await this.view.get('@p2pcord/info', { id: 'info' })
+    if (info && info.root) this.rootHex = b4a.toString(info.root, 'hex')
+
     if (!this.base.writable) return
 
     this.pairMember = this.pairing.addMember({
       discoveryKey: this.base.discoveryKey,
       onadd: (request) => this._onPairRequest(request)
     })
+  }
+
+  // After a key rotation this base is only history: stop letting people join it
+  async archive () {
+    this.archived = true
+    if (this.pairMember) await this.pairMember.close()
+    this.pairMember = null
   }
 
   // Older Autobase versions also kept the group key in plain text next to the
@@ -226,7 +245,7 @@ class Space extends ReadyResource {
     this.encryptionKey = res.encryptionKey
   }
 
-  async _bootstrap ({ name, kind }) {
+  async _bootstrap ({ name, kind, root = null, channels = null, migrants = [] }) {
     const writer = this.base.local.key
     await this._append('@p2pcord/add-member', {
       writer,
@@ -236,19 +255,16 @@ class Space extends ReadyResource {
       role: ROLE_OWNER,
       joined: Date.now()
     })
-    await this._append('@p2pcord/set-info', { id: 'info', name, kind, created: Date.now() })
-    await this._append('@p2pcord/add-channel', {
-      id: randomId(),
-      name: kind === KIND_DM ? 'chat' : 'allgemein',
-      kind: CHANNEL_TEXT,
-      position: 0
-    })
-    await this._append('@p2pcord/add-channel', {
-      id: randomId(),
-      name: kind === KIND_DM ? 'anruf' : 'Lobby',
-      kind: CHANNEL_VOICE,
-      position: 1
-    })
+    await this._append('@p2pcord/set-info', { id: 'info', name, kind, created: Date.now(), root })
+    if (root) this.rootHex = b4a.toString(root, 'hex')
+
+    // A successor base keeps the channel ids, so message history lines up
+    const list = channels || [
+      { id: randomId(), name: kind === KIND_DM ? 'chat' : 'allgemein', kind: CHANNEL_TEXT, position: 0 },
+      { id: randomId(), name: kind === KIND_DM ? 'anruf' : 'Lobby', kind: CHANNEL_VOICE, position: 1 }
+    ]
+    for (const ch of list) await this._append('@p2pcord/add-channel', ch)
+    for (const m of migrants) await this._append('@p2pcord/add-migrant', m)
   }
 
   // Runs on every peer in the same order; must only depend on the view and the node.
@@ -289,8 +305,10 @@ class Space extends ReadyResource {
         if (identities.size >= 2) return
       }
 
-      // A second device of an existing identity keeps that identity's role
-      const role = sameIdentity.reduce((max, x) => Math.max(max, x.role), ROLE_MEMBER)
+      // A second device of an existing identity keeps that identity's role; a
+      // member moving over from a rotated base keeps its old role
+      const migrant = await view.get('@p2pcord/migrants', { identity: m.identity })
+      const role = sameIdentity.reduce((max, x) => Math.max(max, x.role), migrant ? migrant.role : ROLE_MEMBER)
       const isDm = info && info.kind === KIND_DM
       await view.insert('@p2pcord/members', { ...m, name: clip(m.name, MAX_NAME), role })
       await host.addWriter(m.writer, { indexer: isDm || role >= ROLE_ADMIN })
@@ -337,7 +355,8 @@ class Space extends ReadyResource {
         id: 'info',
         name: clip(info.name, MAX_NAME),
         kind: existing ? existing.kind : info.kind,
-        created: existing ? existing.created : info.created
+        created: existing ? existing.created : info.created,
+        root: existing ? existing.root || null : info.root || null
       })
     })
 
@@ -357,7 +376,7 @@ class Space extends ReadyResource {
     r.add('@p2pcord/add-invite', async (inv, { view, from }) => {
       const author = await view.get('@p2pcord/members', { writer: from })
       if (!author) return
-      await view.insert('@p2pcord/invites', { ...inv, uses: 0, createdBy: author.identity })
+      await view.insert('@p2pcord/invites', { ...inv, uses: 0, createdBy: author.identity, restricted: !!inv.restricted })
     })
 
     r.add('@p2pcord/use-invite', async ({ id }, { view, from }) => {
@@ -404,6 +423,28 @@ class Space extends ReadyResource {
       await view.insert('@p2pcord/messages', { ...msg, text: clip(edit.text, MAX_TEXT), edited: edit.ts })
     })
 
+    r.add('@p2pcord/set-successor', async (succ, { view, from }) => {
+      const author = await view.get('@p2pcord/members', { writer: from })
+      if (!author || author.role < ROLE_ADMIN) return
+      if (await view.get('@p2pcord/successor', { id: 'next' })) return // first rotation wins
+      await view.insert('@p2pcord/successor', { id: 'next', ref: succ.ref })
+    })
+
+    r.add('@p2pcord/add-rekey', async (rk, { view, from }) => {
+      const author = await view.get('@p2pcord/members', { writer: from })
+      if (!author || author.role < ROLE_ADMIN) return
+      const succ = await view.get('@p2pcord/successor', { id: 'next' })
+      if (!succ || !b4a.equals(succ.ref, rk.ref)) return
+      if (await view.get('@p2pcord/rekeys', { to: rk.to })) return
+      await view.insert('@p2pcord/rekeys', rk)
+    })
+
+    r.add('@p2pcord/add-migrant', async (m, { view, from }) => {
+      const author = await view.get('@p2pcord/members', { writer: from })
+      if (!author || author.role < ROLE_ADMIN) return
+      await view.insert('@p2pcord/migrants', { identity: m.identity, role: Math.min(m.role, ROLE_OWNER), name: clip(m.name, MAX_NAME) })
+    })
+
     r.add('@p2pcord/remove-message', async (ref, { view, from }) => {
       const author = await view.get('@p2pcord/members', { writer: from })
       const msg = await view.get('@p2pcord/messages', ref)
@@ -414,6 +455,7 @@ class Space extends ReadyResource {
   }
 
   async _onPairRequest (request) {
+    if (this.archived || (await this.successorRef())) return // joins go to the successor base
     const inv = await this.view.get('@p2pcord/invites', { id: request.inviteId })
     if (!inv) return // not our invite (or revoked): another member may answer
     if (inv.expires !== 0 && inv.expires < Date.now()) return request.deny({ status: 3 })
@@ -425,6 +467,10 @@ class Space extends ReadyResource {
       return request.deny({ status: 1 })
     }
     if (!crypto.verify(data.writer, data.signature, data.identity)) return request.deny({ status: 1 })
+
+    if (inv.restricted && !(await this.view.get('@p2pcord/migrants', { identity: data.identity }))) {
+      return request.deny({ status: 1 })
+    }
 
     const state = await this.getState()
     const identity = b4a.toString(data.identity, 'hex')
@@ -485,7 +531,9 @@ class Space extends ReadyResource {
       name: info ? info.name : '',
       kind: info ? info.kind : KIND_GROUP,
       created: info ? info.created : 0,
+      baseId: this.baseId,
       role: me ? me.role : -1,
+      rotated: !!(await this.successorRef()),
       members: [...people.values()],
       channels: channels
         .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name))
@@ -562,7 +610,7 @@ class Space extends ReadyResource {
   }
 
   // Safe defaults: one person, valid for 24 hours
-  async createInvite ({ maxUses = 1, expiresIn = 24 * 3600 * 1000 } = {}) {
+  async createInvite ({ maxUses = 1, expiresIn = 24 * 3600 * 1000, restricted = false } = {}) {
     const info = await this.view.get('@p2pcord/info', { id: 'info' })
     if (info && info.kind === KIND_DM) maxUses = 1
     const expires = expiresIn ? Date.now() + expiresIn : 0
@@ -576,9 +624,41 @@ class Space extends ReadyResource {
       expires,
       maxUses,
       uses: 0,
-      createdBy: this.identity.publicKey
+      createdBy: this.identity.publicKey,
+      restricted
     })
     return code
+  }
+
+  // ---- key rotation ----
+
+  async successorRef () {
+    const succ = await this.view.get('@p2pcord/successor', { id: 'next' })
+    return succ ? succ.ref : null
+  }
+
+  // Announces the successor and hands each remaining member a sealed invite to it
+  async announceSuccessor (successorKey, invite, identities) {
+    const ref = crypto.hash(successorKey)
+    await this._append('@p2pcord/set-successor', { id: 'next', ref })
+    await this.base.update()
+    const current = await this.successorRef()
+    if (!current || !b4a.equals(current, ref)) return false // someone else rotated first
+    for (const hex of identities) {
+      const to = b4a.from(hex, 'hex')
+      await this._append('@p2pcord/add-rekey', { to, ref, box: sealTo(to, b4a.from(invite)) })
+    }
+    return true
+  }
+
+  // The invite to the successor base meant for us, if this base was rotated
+  async pendingRekey () {
+    const ref = await this.successorRef()
+    if (!ref) return null
+    const rk = await this.view.get('@p2pcord/rekeys', { to: this.identity.publicKey })
+    if (!rk || !b4a.equals(rk.ref, ref)) return null
+    const invite = openSealed(this.identity, rk.box)
+    return invite ? { ref: b4a.toString(ref, 'hex'), invite: b4a.toString(invite) } : null
   }
 
   // Revokes an invite created in this session (e.g. replaced in the invite dialog)

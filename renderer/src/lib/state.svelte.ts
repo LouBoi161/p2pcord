@@ -28,6 +28,7 @@ export interface Message {
   files: FileRef[]
   replyTo: string | null
   edited: number
+  base?: string // which (possibly rotated-away) base the message lives in
 }
 
 export interface Channel {
@@ -51,6 +52,8 @@ export interface Space {
   kind: number
   created: number
   role: number
+  baseId: string
+  rotated: boolean
   members: Member[]
   channels: Channel[]
 }
@@ -141,6 +144,7 @@ export function errorText (err: unknown): string {
     FILE_TOO_LARGE: 'Die Datei ist zu groß (max. 2 GB).',
     BACKEND_EXITED: 'Das Backend wurde beendet.',
     ABORTED: 'Abgebrochen.',
+    NOT_ALLOWED: 'Dafür brauchst du Admin-Rechte.',
     VAULT_KEYRING: 'Der Schlüsselbund deines Systems konnte den P2Pcord-Tresor nicht entsperren. Melde dich neu an oder entsperre den Schlüsselbund (z. B. GNOME „Passwörter und Schlüssel“) und starte P2Pcord neu.',
     VAULT_LOCKED: 'Deine lokalen P2Pcord-Daten sind verschlüsselt, aber der passende Schlüssel fehlt. Wurde der Schlüsselbund zurückgesetzt? Deine Daten wurden nicht verändert.'
   }
