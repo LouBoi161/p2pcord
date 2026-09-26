@@ -11,8 +11,12 @@ const {
   session,
   shell,
   desktopCapturer,
-  Menu
+  Menu,
+  safeStorage,
+  dialog
 } = require('electron')
+const fs = require('fs')
+const crypto = require('crypto')
 const path = require('path')
 const { pathToFileURL } = require('url')
 const PearRuntime = require('pear-runtime')
@@ -92,11 +96,47 @@ function sendToAll (channel, data) {
 
 let appPipe = null
 
+// The vault key encrypts identity, group keys and group list at rest. It is
+// protected by the OS keychain (libsecret / Keychain / DPAPI) via safeStorage.
+// Without a keychain it falls back to a local file and the UI warns about it.
+function loadVault () {
+  const file = path.join(appStorage(), 'vault.key')
+  const backend = isLinux ? safeStorage.getSelectedStorageBackend() : 'os'
+  const strong = safeStorage.isEncryptionAvailable() && backend !== 'basic_text' && backend !== 'unknown'
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+
+  let stored = null
+  try {
+    stored = fs.readFileSync(file)
+  } catch {}
+  const plain = stored && stored.toString('latin1').startsWith('plain:')
+
+  let key = null
+  if (stored && plain) key = stored.toString('latin1').slice(6).trim()
+  else if (stored) {
+    try {
+      key = safeStorage.decryptString(stored)
+    } catch (err) {
+      console.error('[vault] keychain refused to decrypt:', err.message)
+      return { error: 'VAULT_KEYRING' }
+    }
+  }
+  if (!key) key = crypto.randomBytes(32).toString('hex')
+
+  if (!stored || (plain && strong)) {
+    const out = strong ? safeStorage.encryptString(key) : Buffer.from('plain:' + key)
+    fs.writeFileSync(file + '.tmp', out, { mode: 0o600 })
+    fs.renameSync(file + '.tmp', file)
+  }
+  return { key, mode: strong ? 'keyring' : 'weak' }
+}
+
 function getAppWorker () {
   if (appPipe) return appPipe
   const worker = PearRuntime.run(require.resolve('..' + APP_WORKER), [appStorage()])
   const pipe = new FramedStream(worker)
   appPipe = pipe
+  pipe.write(Buffer.from(JSON.stringify({ type: 'vault', ...loadVault() })))
   pipe.on('data', (data) => sendToAll('worker:message', data))
   worker.stdout.on('data', (data) => process.stdout.write(data))
   worker.stderr.on('data', (data) => process.stderr.write(data))
@@ -186,10 +226,17 @@ ipcMain.handle('shell:open', (evt, url) => {
   return true
 })
 
-ipcMain.handle('shell:show-file', (evt, rel) => {
+// Attachments live in a cache that is wiped on exit; keeping one means saving a copy
+ipcMain.handle('file:save', async (evt, rel, name) => {
   const file = resolveCached(rel)
-  if (file) shell.showItemInFolder(file)
-  return !!file
+  if (!file) return false
+  const win = BrowserWindow.fromWebContents(evt.sender)
+  const safe = path.basename(String(name || path.basename(file))).replace(/[\\/:*?"<>|]+/g, '_')
+  const res = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath('downloads'), safe) })
+  if (res.canceled || !res.filePath) return false
+  await fs.promises.copyFile(file, res.filePath)
+  shell.showItemInFolder(res.filePath)
+  return true
 })
 
 ipcMain.on('app:info', (evt) => {

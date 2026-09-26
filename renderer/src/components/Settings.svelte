@@ -155,6 +155,11 @@
         <h1>Sicherheit</h1>
         <div class="card list">
           <div class="item"><Icon name="key" size={20} /><div><strong>Kein Account, kein Passwort</strong><p>Deine Identität ist ein Ed25519-Schlüsselpaar, das nur auf diesem Gerät liegt.</p></div></div>
+          {#if ui.vault === 'keyring'}
+            <div class="item"><Icon name="lock" size={20} /><div><strong>Lokale Daten verschlüsselt</strong><p>Dein Schlüssel, die Gruppenschlüssel und deine Gruppenliste sind auf der Festplatte verschlüsselt. Der Tresor-Schlüssel liegt im Schlüsselbund deines Systems. Geöffnete Anhänge werden beim Beenden gelöscht.</p></div></div>
+          {:else}
+            <div class="item warn"><Icon name="lock" size={20} /><div><strong>Kein System-Schlüsselbund gefunden</strong><p>Deine lokalen Daten sind zwar verschlüsselt, aber der Tresor-Schlüssel liegt ungeschützt daneben. Installiere bzw. aktiviere einen Schlüsselbund (z. B. gnome-keyring oder KWallet) und starte P2Pcord neu.</p></div></div>
+          {/if}
           <div class="item"><Icon name="lock" size={20} /><div><strong>Verschlüsselte Verbindungen</strong><p>Jede Verbindung zu einem Peer nutzt das Noise-Protokoll (Hyperswarm) und ist an dessen Schlüssel gebunden.</p></div></div>
           <div class="item"><Icon name="shield" size={20} /><div><strong>Verschlüsselte Daten</strong><p>Nachrichten und Dateien einer Gruppe sind mit dem Gruppenschlüssel verschlüsselt. Nur Mitglieder können sie lesen.</p></div></div>
           <div class="item"><Icon name="phone" size={20} /><div><strong>Ende-zu-Ende-Anrufe</strong><p>Audio und Video laufen direkt per WebRTC (DTLS-SRTP). Die Schlüssel werden über die authentifizierte P2P-Verbindung ausgehandelt.</p></div></div>

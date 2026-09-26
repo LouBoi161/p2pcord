@@ -81,6 +81,7 @@ export const ui = $state({
   me: '',
   name: '',
   loadingSpaces: 0,
+  vault: 'none' as 'keyring' | 'weak' | 'none',
   spaces: {} as Record<string, Space>,
   order: [] as string[],
   peers: {} as Record<string, Peer>,
@@ -139,7 +140,9 @@ export function errorText (err: unknown): string {
     ALREADY_JOINING: 'Mit diesem Code trittst du bereits bei.',
     FILE_TOO_LARGE: 'Die Datei ist zu groß (max. 2 GB).',
     BACKEND_EXITED: 'Das Backend wurde beendet.',
-    ABORTED: 'Abgebrochen.'
+    ABORTED: 'Abgebrochen.',
+    VAULT_KEYRING: 'Der Schlüsselbund deines Systems konnte den P2Pcord-Tresor nicht entsperren. Melde dich neu an oder entsperre den Schlüsselbund (z. B. GNOME „Passwörter und Schlüssel“) und starte P2Pcord neu.',
+    VAULT_LOCKED: 'Deine lokalen P2Pcord-Daten sind verschlüsselt, aber der passende Schlüssel fehlt. Wurde der Schlüsselbund zurückgesetzt? Deine Daten wurden nicht verändert.'
   }
   for (const k of Object.keys(known)) if (msg.includes(k)) return known[k]
   return msg
@@ -325,7 +328,7 @@ export async function boot () {
   })
   on('fatal', (msg) => {
     ui.status = 'fatal'
-    ui.error = msg
+    ui.error = errorText(msg)
   })
   on('exit', () => {
     ui.status = 'fatal'
@@ -340,6 +343,7 @@ export async function boot () {
     ui.name = init.name
     ui.peers = init.peers
     ui.loadingSpaces = init.loading
+    ui.vault = init.vault || 'none'
     for (const s of init.spaces) onSpace(s)
     ui.status = 'ready'
     openView(groups()[0]?.id || 'home')

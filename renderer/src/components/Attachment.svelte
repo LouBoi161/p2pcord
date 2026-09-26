@@ -6,7 +6,10 @@
 
   let { space, file }: { space: string; file: FileRef } = $props()
 
-  const AUTO_LIMIT = 64 * 1024 * 1024
+  // Media up to this size is fetched automatically; anything larger waits for a click
+  const AUTO_LIMIT = 25 * 1024 * 1024
+  const EXECUTABLE = /\.(exe|msi|bat|cmd|com|scr|pif|ps1|psm1|vbs|vbe|js|jse|wsf|wsh|hta|lnk|jar|appimage|sh|bash|run|bin|deb|rpm|apk|dmg|pkg|app|command|reg|dll|so|py|pyw)$/i
+  let risky = $derived(EXECUTABLE.test(file.name))
   let kind = $derived(
     file.mime.startsWith('image/') ? 'image' : file.mime.startsWith('video/') ? 'video' : file.mime.startsWith('audio/') ? 'audio' : 'file'
   )
@@ -37,8 +40,22 @@
   })
 
   async function save () {
+    if (risky && !rel) {
+      ui.dialog = {
+        type: 'confirm',
+        title: 'Ausführbare Datei',
+        text: `„${file.name}“ ist ein Programm oder Skript. Solche Dateien können deinen PC übernehmen. Lade sie nur herunter, wenn du dem Absender wirklich vertraust und sie erwartet hast.`,
+        danger: true,
+        action: 'Trotzdem herunterladen',
+        run: async () => {
+          const r = await fetchIt()
+          if (r) await bridge.saveFile(r, file.name)
+        }
+      }
+      return
+    }
     const r = await fetchIt()
-    if (r) bridge.showFile(r)
+    if (r) await bridge.saveFile(r, file.name)
     else toast('Datei konnte nicht geladen werden – ist der Absender online?', 'error')
   }
 
@@ -61,6 +78,7 @@
     <Icon name={kind === 'image' ? 'image' : 'file'} size={30} stroke={1.5} />
     <div class="meta">
       <span class="name" title={file.name}>{file.name}</span>
+      {#if risky}<span class="risky">Ausführbare Datei – nur öffnen, wenn du dem Absender vertraust</span>{/if}
       <span class="size">
         {formatSize(file.byteLength)}
         {#if loading} · lädt…{:else if failed} · <button class="retry" onclick={fetchIt}>nicht erreichbar – erneut versuchen</button>{/if}
@@ -69,8 +87,8 @@
     {#if loading}
       <span class="spinner"></span>
     {:else}
-      <button class="icon-btn" title={rel ? 'Im Ordner zeigen' : 'Herunterladen'} onclick={save}>
-        <Icon name={rel ? 'folder' : 'download'} size={20} />
+      <button class="icon-btn" title="Speichern unter…" onclick={save}>
+        <Icon name="download" size={20} />
       </button>
     {/if}
   </div>
@@ -128,6 +146,10 @@
   }
   .size {
     font-size: 12px;
+  }
+  .risky {
+    font-size: 12px;
+    color: var(--yellow);
   }
   .retry {
     color: #00a8fc;

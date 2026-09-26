@@ -71,12 +71,13 @@
 
   // ---- invites ----
   let invite = $state('')
-  let inviteUses = $state('0')
-  let inviteExpiry = $state('7')
+  let inviteUses = $state('1')
+  let inviteExpiry = $state('1')
 
   async function makeInvite () {
     if (!space) return
     busy = true
+    if (invite) call('revokeInvite', { id: space.id, code: invite }).catch(() => {})
     invite = ''
     try {
       const days = +inviteExpiry
@@ -93,8 +94,8 @@
   }
 
   onOpen('invite', () => {
-    inviteUses = space?.kind === KIND_DM ? '1' : '0'
-    inviteExpiry = '7'
+    inviteUses = '1'
+    inviteExpiry = '1'
     makeInvite()
   })
 

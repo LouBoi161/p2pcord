@@ -12,6 +12,7 @@ const { pipelinePromise } = require('streamx')
 
 const Space = require('./space')
 const Presence = require('./presence')
+const Vault = require('./vault')
 
 const MAX_FILE = 2 * 1024 * 1024 * 1024 // 2 GB
 const MAX_INLINE = 25 * 1024 * 1024 // pasted data sent over IPC
@@ -21,12 +22,17 @@ class App extends ReadyResource {
    * @param {string} storage directory for all app data
    * @param {object} [opts]
    * @param {Array} [opts.bootstrap] DHT bootstrap (tests)
+   * @param {Buffer | null} [opts.vaultKey] key for at-rest encryption of local secrets
+   * @param {'keyring' | 'weak' | 'none'} [opts.vaultMode] how the vault key itself is protected
    * @param {(event: string, data: any) => void} [opts.emit]
    */
   constructor (storage, opts = {}) {
     super()
     this.storage = storage
     this.bootstrap = opts.bootstrap
+    this.vault = new Vault(opts.vaultKey || null)
+    this.vaultMode = this.vault.enabled ? opts.vaultMode || 'keyring' : 'none'
+    this._migrating = false
     this.send = opts.emit || (() => {})
 
     this.identity = null
@@ -47,7 +53,7 @@ class App extends ReadyResource {
 
   async _open () {
     await fs.promises.mkdir(this.storage, { recursive: true })
-    await fs.promises.mkdir(path.join(this.storage, 'files'), { recursive: true })
+    await this._clearFileCache()
 
     const saved = await this._readJSON('identity.json')
     if (saved && saved.secretKey) {
@@ -56,10 +62,12 @@ class App extends ReadyResource {
       this.profile = { name: saved.name || '' }
     } else {
       this.identity = crypto.keyPair()
-      await this._saveIdentity()
     }
-    this.presence.name = this.profile.name
     this.registry = (await this._readJSON('spaces.json')) || []
+    // (Re)write both files so they are sealed with the vault from now on
+    await this._saveIdentity()
+    await this._saveRegistry()
+    this.presence.name = this.profile.name
 
     this.store = new Corestore(path.join(this.storage, 'corestore'))
     await this.store.ready()
@@ -72,7 +80,14 @@ class App extends ReadyResource {
     this.pairing = new BlindPairing(this.swarm)
 
     // Open known spaces in the background so the UI appears immediately
-    for (const entry of this.registry) this._openExisting(entry).catch((err) => this._warn(err))
+    const opening = this.registry.map((entry) => this._openExisting(entry).catch((err) => this._warn(err)))
+
+    // After sealing data from an older version, compact the database so the old
+    // plain-text group keys are dropped from its files
+    if (this._migrating) {
+      await Promise.all(opening)
+      await this.store.storage.compact().catch((err) => this._warn(err))
+    }
   }
 
   async _close () {
@@ -82,22 +97,43 @@ class App extends ReadyResource {
     await this.pairing.close()
     await this.swarm.destroy()
     await this.store.close()
+    await this._clearFileCache().catch(noop)
   }
 
   // ---- persistence ----
 
+  // Missing file -> null. A sealed file that cannot be opened is fatal: never
+  // silently replace an identity we could not decrypt.
   async _readJSON (name) {
+    let buf
     try {
-      return JSON.parse(await fs.promises.readFile(path.join(this.storage, name), 'utf8'))
-    } catch {
-      return null
+      buf = await fs.promises.readFile(path.join(this.storage, name))
+    } catch (err) {
+      if (err.code === 'ENOENT') return null
+      throw err
     }
+    if (Vault.isSealed(buf)) {
+      if (!this.vault.enabled) throw new Error('VAULT_LOCKED')
+      buf = this.vault.open(buf)
+    } else if (this.vault.enabled) {
+      this._migrating = true // plain data from an older version, gets sealed now
+    }
+    return JSON.parse(b4a.toString(buf))
   }
 
   async _writeJSON (name, value) {
     const file = path.join(this.storage, name)
-    await fs.promises.writeFile(file + '.tmp', JSON.stringify(value))
+    let data = b4a.from(JSON.stringify(value))
+    if (this.vault.enabled) data = this.vault.seal(data)
+    await fs.promises.writeFile(file + '.tmp', data)
     await fs.promises.rename(file + '.tmp', file)
+  }
+
+  // Decrypted attachments only live here while the app runs
+  async _clearFileCache () {
+    const dir = path.join(this.storage, 'files')
+    await fs.promises.rm(dir, { recursive: true, force: true })
+    await fs.promises.mkdir(dir, { recursive: true })
   }
 
   _saveIdentity () {
@@ -120,6 +156,7 @@ class App extends ReadyResource {
       pairing: this.pairing,
       identity: this.identity,
       profileName: this.profile.name || 'Unbekannt',
+      blindEncryption: this.vault.blindEncryption,
       ...opts
     })
   }
@@ -193,7 +230,8 @@ class App extends ReadyResource {
       name: this.profile.name,
       spaces,
       loading: this.registry.length - this.spaces.size,
-      peers: this.presence.snapshot()
+      peers: this.presence.snapshot(),
+      vault: this.vaultMode
     }
   }
 
@@ -267,6 +305,10 @@ class App extends ReadyResource {
 
   createInvite ({ id, maxUses, expiresIn }) {
     return this._space(id).createInvite({ maxUses, expiresIn })
+  }
+
+  revokeInvite ({ id, code }) {
+    return this._space(id).revokeInvite(code)
   }
 
   addChannel ({ id, name, kind }) {

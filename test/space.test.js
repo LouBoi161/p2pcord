@@ -56,7 +56,7 @@ test('create group, invite two peers, exchange messages', async (t) => {
   t.is(state.channels.length, 2)
   const text = state.channels.find((c) => c.kind === Space.CHANNEL_TEXT)
 
-  const code = await a.createInvite()
+  const code = await a.createInvite({ maxUses: 0 })
   t.ok(typeof code === 'string' && code.length > 20)
 
   const b = bob.open({ invite: code })

@@ -73,6 +73,7 @@ class Space extends ReadyResource {
     this.encryptionKey = opts.encryptionKey || null
     this.invite = opts.invite || null
     this.createOpts = opts.create || null
+    this.blindEncryption = opts.blindEncryption || null
 
     this.base = null
     this.blobs = null
@@ -80,6 +81,7 @@ class Space extends ReadyResource {
     this.pairMember = null
     this._remoteBlobs = new Map()
     this._abortWait = null
+    this._invites = new Map() // code -> invite id, for revocation
 
     this.router = new Dispatch.Router()
     this._setupRouter()
@@ -103,6 +105,7 @@ class Space extends ReadyResource {
     this.base = new Autobase(this.store, this.key, {
       encrypt: true,
       encryptionKey: this.encryptionKey,
+      blindEncryption: this.blindEncryption,
       ackInterval: 1000,
       open: (store) => HyperDB.bee(store.get('view'), DB, { extension: false, autoUpdate: true }),
       close: (view) => view.close(),
@@ -116,6 +119,7 @@ class Space extends ReadyResource {
 
     this.key = this.base.key
     this.encryptionKey = this.base.encryptionKey
+    if (this.blindEncryption) await this._dropPlainKeyCopy()
     this.topic = this.swarm.join(this.base.discoveryKey)
 
     const blobKey = crypto.hash([this.encryptionKey, b4a.from('p2pcord/blobs')])
@@ -128,7 +132,9 @@ class Space extends ReadyResource {
       await this._bootstrap(this.createOpts)
     }
 
-    if (!this.base.writable) {
+    // Only a fresh join waits to be added as writer; an existing space we were
+    // removed from opens read-only (the app then reports it as removed)
+    if (!this.base.writable && this.invite) {
       await new Promise((resolve, reject) => {
         const check = () => {
           if (!this.base.writable) return
@@ -147,10 +153,21 @@ class Space extends ReadyResource {
 
     this.view.core.download({ start: 0, end: -1 })
 
+    if (!this.base.writable) return
+
     this.pairMember = this.pairing.addMember({
       discoveryKey: this.base.discoveryKey,
       onadd: (request) => this._onPairRequest(request)
     })
+  }
+
+  // Older Autobase versions also kept the group key in plain text next to the
+  // bootstrap core; with blind encryption active that copy must go.
+  async _dropPlainKeyCopy () {
+    const boot = this.store.get({ key: this.base.key, active: false })
+    await boot.ready()
+    if (await boot.getUserData('autobase/encryption')) await boot.setUserData('autobase/encryption', null)
+    await boot.close()
   }
 
   close () {
@@ -544,11 +561,14 @@ class Space extends ReadyResource {
     if (me) await this._append('@p2pcord/remove-member', { writer: me.writer })
   }
 
-  async createInvite ({ maxUses = 0, expiresIn = 7 * 24 * 3600 * 1000 } = {}) {
+  // Safe defaults: one person, valid for 24 hours
+  async createInvite ({ maxUses = 1, expiresIn = 24 * 3600 * 1000 } = {}) {
     const info = await this.view.get('@p2pcord/info', { id: 'info' })
     if (info && info.kind === KIND_DM) maxUses = 1
     const expires = expiresIn ? Date.now() + expiresIn : 0
     const { id, invite, publicKey } = BlindPairing.createInvite(this.base.key, { expires })
+    const code = z32.encode(invite)
+    this._invites.set(code, id)
     await this._append('@p2pcord/add-invite', {
       id,
       invite,
@@ -558,7 +578,16 @@ class Space extends ReadyResource {
       uses: 0,
       createdBy: this.identity.publicKey
     })
-    return z32.encode(invite)
+    return code
+  }
+
+  // Revokes an invite created in this session (e.g. replaced in the invite dialog)
+  async revokeInvite (code) {
+    const id = this._invites.get(code)
+    if (!id) return false
+    this._invites.delete(code)
+    await this._append('@p2pcord/remove-invite', { id })
+    return true
   }
 
   // ---- files ----

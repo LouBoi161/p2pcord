@@ -18,7 +18,7 @@ contextBridge.exposeInMainWorld('p2p', {
   pathForFile: (file) => webUtils.getPathForFile(file),
   writeClipboard: (text) => ipcRenderer.invoke('clipboard:write', text),
   openExternal: (url) => ipcRenderer.invoke('shell:open', url),
-  showFile: (rel) => ipcRenderer.invoke('shell:show-file', rel),
+  saveFile: (rel, name) => ipcRenderer.invoke('file:save', rel, name),
   screenSources: () => ipcRenderer.invoke('screen:sources'),
   selectScreen: (id) => ipcRenderer.invoke('screen:select', id),
   onUpdateReady: (listener) => {

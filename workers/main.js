@@ -17,6 +17,7 @@ const METHODS = new Set([
   'getSpace',
   'renameSpace',
   'createInvite',
+  'revokeInvite',
   'addChannel',
   'removeChannel',
   'setRole',
@@ -39,17 +40,38 @@ function write (obj) {
   pipe.write(b4a.from(JSON.stringify(obj)))
 }
 
-const app = new App(storage, {
-  emit: (event, data) => write({ event, data })
-})
+let app = null
 
-goodbye(() => app.close())
+// The first frame from the main process carries the vault key (from the OS keychain)
+function start ({ key, mode, error }) {
+  app = new App(storage, {
+    vaultKey: key ? b4a.from(key, 'hex') : null,
+    vaultMode: mode,
+    emit: (event, data) => write({ event, data })
+  })
+  goodbye(() => app.close())
+  if (error) {
+    write({ event: 'fatal', data: error })
+    return
+  }
+  app.ready().then(
+    () => write({ event: 'ready', data: null }),
+    (err) => {
+      console.error(err)
+      write({ event: 'fatal', data: (err && err.message) || String(err) })
+    }
+  )
+}
 
 pipe.on('data', async (data) => {
   let msg
   try {
     msg = JSON.parse(b4a.toString(data))
   } catch {
+    return
+  }
+  if (!app) {
+    if (msg && msg.type === 'vault') start(msg)
     return
   }
   if (!msg || typeof msg.id !== 'number' || !METHODS.has(msg.method)) return
@@ -61,11 +83,3 @@ pipe.on('data', async (data) => {
     write({ id: msg.id, error: (err && err.message) || String(err) })
   }
 })
-
-app.ready().then(
-  () => write({ event: 'ready', data: null }),
-  (err) => {
-    console.error(err)
-    write({ event: 'fatal', data: (err && err.message) || String(err) })
-  }
-)

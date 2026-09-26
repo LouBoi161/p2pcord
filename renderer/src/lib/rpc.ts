@@ -15,7 +15,7 @@ interface Bridge {
   pathForFile(file: File): string
   writeClipboard(text: string): Promise<void>
   openExternal(url: string): Promise<boolean>
-  showFile(rel: string): Promise<boolean>
+  saveFile(rel: string, name: string): Promise<boolean>
   screenSources(): Promise<ScreenSource[]>
   selectScreen(id: string | null): Promise<boolean>
   onUpdateReady(listener: () => void): () => void
