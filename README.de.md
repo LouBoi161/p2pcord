@@ -17,6 +17,8 @@
   <a href="README.md">English</a>
 </p>
 
+<p align="center"><sub>🤖 Mit Hilfe von KI entwickelt – zusammen mit <a href="https://www.anthropic.com/claude">Claude</a> (Anthropic). Jeder Commit mit KI-Unterstützung ist mit <code>Co-Authored-By: Claude</code> gekennzeichnet.</sub></p>
+
 ![P2Pcord: links die Kanäle, in der Mitte der aktive Call, rechts der Textchat](docs/screenshots/call.png)
 
 ## Warum
@@ -166,6 +168,16 @@ npm start
 | `npx electron-forge make --targets @electron-forge/maker-zip` | macOS-ZIP (auf einem Mac) |
 
 Mehr zu Architektur und Details steht in der [englischen README](README.md#architecture).
+
+## Mit KI entwickelt
+
+P2Pcord wurde mit Hilfe von KI entwickelt: Große Teile von Code, Tests und Dokumentation sind zusammen mit
+[Claude](https://www.anthropic.com/claude) (Anthropic) entstanden und wurden vom Maintainer gesteuert, geprüft
+und getestet. Commits mit KI-Unterstützung tragen den Vermerk `Co-Authored-By: Claude`.
+
+Die App selbst nutzt KI nur für die **lokale Rauschunterdrückung** (DeepFilterNet3 / RNNoise). Sie entfernt
+Hintergrundgeräusche aus deiner echten Stimme, erzeugt oder verändert keine Sprachinhalte, läuft komplett auf
+deinem Gerät und lässt sich in den Einstellungen abschalten.
 
 ## Lizenz
 

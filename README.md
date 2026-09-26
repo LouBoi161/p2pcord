@@ -17,6 +17,8 @@
   <a href="README.de.md">Deutsch</a>
 </p>
 
+<p align="center"><sub>🤖 Built with the help of AI – developed together with <a href="https://www.anthropic.com/claude">Claude</a> (Anthropic). Every commit made with AI assistance is marked <code>Co-Authored-By: Claude</code>.</sub></p>
+
 ![P2Pcord: channels on the left, the active call in the middle, text chat on the right](docs/screenshots/call.png)
 
 ## Why
@@ -202,6 +204,16 @@ Every push is tested in CI; tagged releases are built on GitHub Actions for Linu
 - Global push-to-talk while a game has focus
 - Optional always-on peer (e.g. a Raspberry Pi) for offline delivery
 - Reactions, typing indicator, mobile apps
+
+## Made with AI
+
+P2Pcord was developed with the help of AI: large parts of the code, tests and documentation were written
+together with [Claude](https://www.anthropic.com/claude) (Anthropic) and reviewed, tested and directed by the
+maintainer. Commits made with AI assistance carry a `Co-Authored-By: Claude` trailer.
+
+The app itself uses AI only for **local noise suppression** (DeepFilterNet3 / RNNoise). It removes background
+noise from your real voice, never generates or alters speech content, runs entirely on your device and can
+be switched off in the settings.
 
 ## License
 
