@@ -1,4 +1,5 @@
 <script lang="ts">
+  // Icon paths based on Lucide (ISC, https://lucide.dev) and Feather (MIT, https://feathericons.com); see NOTICE
   let { name, size = 20, stroke = 2 }: { name: string; size?: number; stroke?: number } = $props()
 
   const icons: Record<string, string> = {

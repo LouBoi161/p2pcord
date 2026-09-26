@@ -14,6 +14,14 @@ This product bundles or builds on third-party software:
 - deepfilternet3-noise-filter (WebAssembly build of libDF) – MIT OR Apache-2.0
 - @sapphi-red/web-noise-suppressor (RNNoise) – MIT; RNNoise – BSD-3-Clause (Xiph.Org / Mozilla)
 - libsodium via sodium-native – ISC
+- UI icons (renderer/src/components/Icon.svelte) are based on Lucide – ISC –
+  Copyright (c) Lucide Contributors, https://lucide.dev – and on Feather –
+  MIT – Copyright (c) 2013-2023 Cole Bemis, https://feathericons.com
+
+P2Pcord is an independent project and is not affiliated with, endorsed by or
+sponsored by Discord Inc. or TeamSpeak Systems GmbH. "Discord" and "TeamSpeak"
+are trademarks of their respective owners and are only used to describe the
+kind of application.
 
 Individual licenses are included with each package in the distributed application
 (resources/app/node_modules/*/LICENSE).

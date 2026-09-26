@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>Serverloser Voice-, Video- und Text-Chat für Freunde.</b><br>
-  Aussehen wie Discord, so einfach wie TeamSpeak – aber Peer-to-Peer, Ende-zu-Ende-verschlüsselt und ohne Account.
+  Vom Aufbau her von Discord inspiriert, so einfach wie TeamSpeak – aber Peer-to-Peer, Ende-zu-Ende-verschlüsselt und ohne Account.
 </p>
 
 <p align="center">
@@ -187,5 +187,9 @@ deinem Gerät und lässt sich in den Einstellungen abschalten.
 
 ## Lizenz
 
-[Apache-2.0](LICENSE). Drittkomponenten stehen in [NOTICE](NOTICE). Spiegel auf
+[Apache-2.0](LICENSE). Drittkomponenten stehen in [NOTICE](NOTICE).
+
+P2Pcord ist ein unabhängiges Projekt und steht in keiner Verbindung zu Discord Inc. oder der TeamSpeak Systems
+GmbH und wird von diesen weder unterstützt noch gesponsert. „Discord“ und „TeamSpeak“ sind Marken ihrer
+jeweiligen Inhaber und werden nur verwendet, um die Art der Anwendung zu beschreiben. Spiegel auf
 [GitLab](https://gitlab.com/louiswalder6/p2pcord).
