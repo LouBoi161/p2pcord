@@ -51,7 +51,7 @@ Download the file for your system from the
 | System | File | Status |
 |---|---|---|
 | Linux (any distro) | `P2Pcord-<version>-x64.AppImage` | ✅ tested |
-| Arch Linux / Manjaro / CachyOS | AUR package `p2pcord-bin` | ✅ tested |
+| Arch Linux / Manjaro / CachyOS | `PKGBUILD` in this repo (AUR coming soon) | ✅ tested |
 | Linux (manual) | `P2Pcord-linux-x64-<version>.zip` | ✅ tested |
 | Windows 10/11 (x64) | `P2Pcord-win32-x64-<version>.zip` | ⚠️ experimental, unsigned |
 | macOS (Apple Silicon) | `P2Pcord-darwin-arm64-<version>.zip` | ⚠️ experimental, unsigned |
@@ -87,13 +87,19 @@ curl -L -o ~/.local/share/icons/hicolor/256x256/apps/p2pcord.png \
 If the AppImage does not start, install FUSE 2 (`libfuse2` on Debian/Ubuntu, `fuse2` on Arch,
 `fuse-libs` on Fedora) or run it with `--appimage-extract-and-run`.
 
-### Arch Linux (AUR)
+### Arch Linux
+
+The AUR package `p2pcord-bin` is ready but not published yet (AUR registration is currently paused).
+Until then, build the very same package straight from this repository:
 
 ```sh
-yay -S p2pcord-bin      # or: paru -S p2pcord-bin
+git clone https://github.com/LouBoi161/p2pcord.git
+cd p2pcord/packaging/aur/p2pcord-bin
+makepkg -si
 ```
 
-It installs to `/opt/p2pcord`, adds a menu entry and the `p2pcord` command.
+`makepkg` downloads the release zip, checks its SHA-256 and installs to `/opt/p2pcord` with a menu entry
+and the `p2pcord` command. Once it is on the AUR, `yay -S p2pcord-bin` will do the same.
 
 ### Windows
 
