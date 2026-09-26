@@ -20,6 +20,16 @@ function createApp (t, testnet, dir) {
   return { app, events }
 }
 
+async function until (fn, timeout = 20000) {
+  const start = Date.now()
+  while (Date.now() - start < timeout) {
+    const v = await fn()
+    if (v) return v
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  throw new Error('timeout')
+}
+
 function waitFor (app, event, fn = () => true, timeout = 20000) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('timeout waiting for ' + event)), timeout)
@@ -53,10 +63,15 @@ test('two apps: join, presence, signaling, files, persistence', async (t) => {
 
   // Presence: b sees a in the voice channel once membership is known
   const voice = group.channels.find((c) => c.kind === 1)
-  await waitFor(a, 'space', (s) => s.members.length === 2)
-  await waitFor(b, 'space', (s) => s.members.length === 2).catch(() => {})
+  // Poll instead of waiting for events: they may already have fired
+  await until(async () => (await a.getSpace({ id: group.id })).members.length === 2)
+  await until(async () => (await b.getSpace({ id: group.id })).members.length === 2)
+  await until(() => b._isMember(ia, group.id) && a._isMember(ib, group.id))
   a.setVoice({ space: group.id, channel: voice.id, muted: false, deaf: false })
-  const peers = await waitFor(b, 'peers', (p) => p[ia] && p[ia].voice)
+  const peers = await until(() => {
+    const p = b.presence.snapshot()
+    return p[ia] && p[ia].voice ? p : null
+  })
   t.is(peers[ia].voice.channel, voice.id)
   t.is(peers[ia].name, 'Louis')
 
@@ -89,7 +104,7 @@ test('two apps: join, presence, signaling, files, persistence', async (t) => {
   await a.close()
   const { app: a2 } = createApp(t, testnet, dirA)
   await a2.ready()
-  await waitFor(a2, 'space', (s) => s.id === group.id)
+  await until(() => a2.spaces.has(group.id))
   const init = await a2.init()
   t.is(init.identity, ia)
   t.is(init.name, 'Louis')
