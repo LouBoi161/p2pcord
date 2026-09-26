@@ -1,0 +1,70 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --ignore-scripts
+      - run: npm test
+
+  build:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            targets: pear-electron-forge-maker-appimage
+          - os: windows-latest
+            targets: '@electron-forge/maker-zip'
+          - os: macos-latest
+            targets: '@electron-forge/maker-zip'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: System packages (AppImage tooling)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libfuse2t64 || sudo apt-get install -y libfuse2
+      - run: npm ci --ignore-scripts
+      - run: node node_modules/electron/install.js
+      - run: npm run build
+      - run: npx electron-forge make --targets "${{ matrix.targets }}"
+        shell: bash
+      - name: Linux zip (separately; parallel makers collide on Linux)
+        if: runner.os == 'Linux'
+        run: npx electron-forge make --skip-package --targets @electron-forge/maker-zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: p2pcord-${{ runner.os }}
+          path: |
+            out/make/**/*.zip
+            out/make/*.AppImage
+          if-no-files-found: error
+      # Linux and Windows release files are uploaded by the maintainer (the AUR
+      # package pins their checksums); CI adds the macOS build to tagged releases.
+      - name: Attach macOS build to release
+        if: runner.os == 'macOS' && startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for f in out/make/zip/darwin/*/*.zip; do
+            gh release upload "${GITHUB_REF_NAME}" "$f" --clobber
+          done

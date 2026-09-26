@@ -1,105 +1,210 @@
-# P2Pcord
+<p align="center">
+  <img src="build/icon/icon-256x256.png" width="112" alt="P2Pcord logo">
+</p>
 
-Serverloser Voice-, Video- und Text-Chat für Freundesgruppen – im Stil von Discord, so schlicht wie
-TeamSpeak. Läuft komplett Peer-to-Peer auf dem [Holepunch/Pear-Stack](https://docs.pears.com)
-(derselbe Unterbau wie Keet), Ende-zu-Ende-verschlüsselt, mit KI-Rauschunterdrückung.
+<h1 align="center">P2Pcord</h1>
 
-## Funktionen
+<p align="center">
+  <b>Serverless voice, video and text chat for friends.</b><br>
+  Looks like Discord, as simple as TeamSpeak – but peer-to-peer, end-to-end encrypted and without any account.
+</p>
 
-- **Gruppen** mit Text- und Sprachkanälen, Rollen (Besitzer/Admin/Mitglied), Kicken
-- **Freunde & Direktnachrichten** (1:1) inkl. Anrufen mit Klingeln/Annehmen/Ablehnen
-- **Einladungscodes** (Blind Pairing): standardmäßig 1 Person / 24 h, ersetzte Codes werden widerrufen
-- **Schlüsselrotation**: Wer entfernt wird, ist wirklich draußen – die Gruppe zieht automatisch auf neue Schlüssel um
-- **Nachrichten**: Antworten, Bearbeiten, Löschen, Markdown-Light (`**fett**`, `*kursiv*`,
-  `` `code` ``, Codeblöcke, `||Spoiler||`), Links mit Sicherheitsabfrage
-- **Dateien, Bilder, Videos** bis 2 GB: Einfügen, Drag & Drop, Vorschau, Video mit Spulen
-- **Voice** als WebRTC-Mesh mit Opus (64/96/128 kbps, FEC, kein DTX), Sprachaktivierung oder
-  Push-to-Talk, Lautstärke pro Person, Stumm/Taub, Sprech-Indikator
-- **KI-Rauschunterdrückung** lokal: DeepFilterNet3 (Standard) oder RNNoise (leicht)
-- **Kamera** (720p) und **Bildschirm teilen** (bis 1080p60/1440p30, Windows inkl. System-Audio)
-- **Sicherheitsnummern** zum Verifizieren von Kontakten, Desktop-Benachrichtigungen, Töne
+<p align="center">
+  <a href="https://github.com/LouBoi161/p2pcord/releases/latest">Download</a> ·
+  <a href="#installation">Installation</a> ·
+  <a href="#security">Security</a> ·
+  <a href="#building-from-source">Build from source</a> ·
+  <a href="README.de.md">Deutsch</a>
+</p>
 
-## Architektur
+![P2Pcord: channels on the left, the active call in the middle, text chat on the right](docs/screenshots/call.png)
 
-```
-Renderer (Svelte, sandboxed)  ──IPC──  Electron main (dünne Hülle)  ──pipe──  Bare-Worker (P2P)
-   UI, WebRTC, Audio-Pipeline           Protokolle app:// + p2pfile://        Corestore, Hyperswarm,
-                                        Screen-Capture, Berechtigungen        Autobase, Blind Pairing
-```
+## Why
 
-| Teil | Datei | Aufgabe |
+TeamSpeak is buggy, Discord reads everything, and both need servers. P2Pcord connects you and your
+friends directly. There is no server that can go down, get hacked or read along.
+
+## Features
+
+- **Groups** with text and voice channels, roles (owner / admin / member) and an invite system
+- **Friends & direct messages**, including 1:1 calls with ringing, accept and decline
+- **Invite codes** via blind pairing: one person and 24 hours by default, replaced codes are revoked
+- **Messages** with replies, edits, deletes and a small markdown subset (`**bold**`, `*italic*`,
+  `` `code` ``, code blocks, `||spoilers||`); links open only after confirmation
+- **Files, images and videos** up to 2 GB: paste, drag & drop, previews, seekable video
+- **Voice**: WebRTC mesh with Opus at 64/96/128 kbps, in-band FEC, no DTX, voice activity or
+  push-to-talk, per-user volume, mute/deafen and speaking indicators
+- **AI noise suppression**, running locally: DeepFilterNet3 (default) or RNNoise (light)
+- **Camera** (720p) and **screen sharing** (up to 1080p60 / 1440p30)
+- **Key rotation**: removing someone moves the group to fresh keys automatically, so they are really out
+- **Safety numbers** to verify contacts, desktop notifications and sounds
+
+<p align="center"><img src="docs/screenshots/settings.png" width="720" alt="Voice settings with AI noise suppression"></p>
+
+## Installation
+
+Download the file for your system from the
+[latest release](https://github.com/LouBoi161/p2pcord/releases/latest).
+
+| System | File | Status |
 |---|---|---|
-| Gruppen-Logik | `workers/space.js` | Verschlüsselte Autobase je Gruppe/DM; `apply()` prüft Mitgliedschaft & Rollen deterministisch auf jedem Peer |
-| Backend | `workers/app.js` | Identität, Gruppenliste, Dateien, RPC-Methoden |
-| Präsenz | `workers/presence.js` | Protomux-Kanal: online, Voice-Status, WebRTC-Signalisierung |
-| Schema | `schema.js` → `spec/` | HyperSchema/HyperDB/HyperDispatch (generiert mit `npm run build:db`) |
-| Calls | `renderer/src/lib/voice/` | Mesh-PeerConnections (Perfect Negotiation), Mikrofon-Kette, Opus-Tuning |
-| UI | `renderer/src/components/` | Rail · Kanalliste · Call · Chat · Dialoge · Einstellungen |
+| Linux (any distro) | `P2Pcord-<version>-x64.AppImage` | ✅ tested |
+| Arch Linux / Manjaro / CachyOS | AUR package `p2pcord-bin` | ✅ tested |
+| Linux (manual) | `P2Pcord-linux-x64-<version>.zip` | ✅ tested |
+| Windows 10/11 (x64) | `P2Pcord-win32-x64-<version>.zip` | ⚠️ experimental, unsigned |
+| macOS (Apple Silicon) | `P2Pcord-darwin-arm64-<version>.zip` | ⚠️ experimental, unsigned |
 
-## Sicherheitsmodell
-
-- **Identität** = Ed25519-Schlüsselpaar pro Gerät, kein Account/Passwort.
-- **Transport**: Hyperswarm/Noise-XX – jede Verbindung ist verschlüsselt und an den Identitätsschlüssel gebunden.
-- **Daten**: Jede Gruppe ist eine Autobase mit `encrypt: true`; Dateien liegen in einem Hypercore,
-  dessen Schlüssel vom Gruppenschlüssel abgeleitet ist.
-- **Beitritt**: Blind Pairing – der Code enthält keine Schlüssel; ein Mitglied prüft die Einladung
-  (Ablauf, Nutzungen, DM max. 2 Personen) und die Signatur des Beitretenden.
-- **Anrufe**: DTLS-SRTP direkt zwischen den Peers. SDP/Fingerprints laufen über den authentifizierten
-  Hyperswarm-Kanal → kein Man-in-the-Middle möglich, kein Signaling-Server.
-- **Entfernen = neue Schlüssel**: Beim Kick legt der Admin eine Nachfolge-Base mit neuem Schlüssel an
-  (gleiche Kanäle, Rollen, stabile Gruppen-ID). Jedes verbleibende Mitglied bekommt in der alten Base eine
-  Einladung, versiegelt mit `crypto_box_seal` an seinen Identitätsschlüssel; die Einladung ist zusätzlich auf
-  die Mitgliederliste beschränkt. Der alte Verlauf bleibt lesbar, neue Nachrichten sieht der Gekickte nicht.
-- **Lokale Daten**: Identität, Gruppenliste und Gruppenschlüssel sind mit einem Tresor-Schlüssel versiegelt
-  (XSalsa20-Poly1305), der im System-Schlüsselbund liegt (Electron `safeStorage`). Geöffnete Anhänge werden
-  beim Beenden gelöscht; „Speichern unter…“ legt bewusst eine Kopie ab.
-- **Electron-Härtung**: `sandbox`, `contextIsolation`, strikte CSP, keine Navigation/Popups,
-  Anhänge nur als Medien (nie als Dokument), Pfad-Traversal-Schutz.
-- **Grenzen** (bewusst): Peers sehen gegenseitig ihre IP-Adressen. Nachrichten sind signiert, also nicht
-  abstreitbar. Gekickte behalten, was sie bis zum Kick empfangen haben. Offline-Nachrichten brauchen, dass irgendein
-  Mitglied online ist. Für Anrufe wird standardmäßig ein öffentlicher STUN-Server nach der eigenen
-  Adresse gefragt (nur Adressabfrage, in den Einstellungen änderbar; optional eigener TURN-Server).
-
-## Entwicklung
-
-Voraussetzung: Node ≥ 22, npm (kein pnpm – bricht Electron Forge).
+### Linux – AppImage
 
 ```sh
-npm install --ignore-scripts --allow-git=all   # Electron Forge zieht @electron/node-gyp aus Git
-node node_modules/electron/install.js
-npm start                                    # baut UI + startet (Daten: ~/.config/P2Pcord-dev)
-npm run start:peer -- /tmp/peer2             # zweite Instanz mit eigener Identität zum Testen
-npm test                                     # Backend-Tests gegen ein lokales DHT-Testnetz
+chmod +x P2Pcord-*-x64.AppImage
+./P2Pcord-*-x64.AppImage
 ```
 
-Tests mit Fake-Mikrofon/-Kamera und ohne Tonausgabe: `P2PCORD_FAKE_MEDIA=1 npm run start:peer -- /tmp/a`.
-Mit `P2PCORD_DEBUG_PORT=9301` lässt sich eine Dev-Instanz per Chrome DevTools Protocol steuern.
-
-Die DeepFilterNet3-Assets (WASM + Modell, ~24 MB) lädt `scripts/fetch-models.mjs` einmalig beim Build
-und prüft sie per SHA-256. Zur Laufzeit wird nichts aus dem Netz nachgeladen.
-
-## Bauen
+To get it into your app menu, either use a tool such as
+[Gear Lever](https://flathub.org/apps/it.mijorus.gearlever) or AppImageLauncher, or do it by hand:
 
 ```sh
-npm run make       # Linux AppImage  → out/make/P2Pcord-<version>-x64.AppImage
-npm run make:win   # Windows (portables ZIP, Cross-Build von Linux) → out/make/zip/win32/x64/
+mkdir -p ~/Applications ~/.local/share/applications
+mv P2Pcord-*-x64.AppImage ~/Applications/P2Pcord.AppImage
+cat > ~/.local/share/applications/p2pcord.desktop <<EOF
+[Desktop Entry]
+Type=Application
+Name=P2Pcord
+Exec=$HOME/Applications/P2Pcord.AppImage %U
+Icon=p2pcord
+Categories=Network;Chat;InstantMessaging;
+StartupWMClass=P2Pcord
+EOF
+# icon (from the repository)
+mkdir -p ~/.local/share/icons/hicolor/256x256/apps
+curl -L -o ~/.local/share/icons/hicolor/256x256/apps/p2pcord.png \
+  https://raw.githubusercontent.com/LouBoi161/p2pcord/main/build/icon/icon-256x256.png
 ```
 
-P2P-Updates (OTA): `package.json#upgrade` braucht einen echten Link aus `pear touch`. Solange dort der
-Platzhalter steht, ist der Updater deaktiviert.
+If the AppImage does not start, install FUSE 2 (`libfuse2` on Debian/Ubuntu, `fuse2` on Arch,
+`fuse-libs` on Fedora) or run it with `--appimage-extract-and-run`.
 
-## Rauschunterdrückung – Messwerte
+### Arch Linux (AUR)
 
-Gemessen in der App (Offline-Rendering, saubere Sprache + Störgeräusch aus dem DeepFilterNet-Repo):
+```sh
+yay -S p2pcord-bin      # or: paru -S p2pcord-bin
+```
 
-| Filter | Rosa Rauschen, 10 dB SNR | Echtes Störgeräusch, 5 dB SNR | CPU (Ryzen 7800X3D) |
+It installs to `/opt/p2pcord`, adds a menu entry and the `p2pcord` command.
+
+### Windows
+
+1. Unpack `P2Pcord-win32-x64-<version>.zip`, for example to `C:\Users\<you>\P2Pcord`.
+2. Start `P2Pcord.exe`. The build is not code-signed, so SmartScreen will warn:
+   click **More info → Run anyway**.
+3. Optional: right-click `P2Pcord.exe` → *Send to → Desktop (create shortcut)*.
+4. Allow network access when the Windows firewall asks (needed for direct connections).
+
+### macOS
+
+1. Unpack the zip and move `P2Pcord.app` to *Applications*.
+2. The build is only ad-hoc signed, so remove the download quarantine once:
+   ```sh
+   xattr -dr com.apple.quarantine /Applications/P2Pcord.app
+   ```
+3. Start it; allow microphone, camera and screen recording when asked.
+
+### First start
+
+1. Pick a display name. A key pair is created on your device – that is your identity. No account, no password.
+2. **Add a friend:** *Direct messages → Add friend → Create friend code* and send the code to your friend.
+   Your friend enters it under *Redeem code*. You must be online while they redeem it.
+3. **Create a group:** the **+** in the left bar. Invite people via the group menu → *Invite people*.
+4. **Talk:** click a voice channel. Pick your microphone and noise suppression under ⚙ → *Voice & Video*.
+
+## Security
+
+| What | How |
+|---|---|
+| Identity | Ed25519 key pair per device, no account |
+| Connections | Hyperswarm / Noise XX, bound to the peer's identity key |
+| Messages & files | Each group is an encrypted Autobase; attachments live in a Hypercore encrypted with a key derived from the group key |
+| Calls | WebRTC DTLS-SRTP directly between peers; SDP and fingerprints travel over the authenticated P2P channel, so there is no signaling server and no man in the middle |
+| Joining | Blind pairing: an invite code contains no keys; an online member checks expiry, uses and the joiner's signature |
+| Removing members | The group moves to a new base with fresh keys; every remaining member gets an invite sealed to their identity key (`crypto_box_seal`), restricted to the member list |
+| Local data | Identity, group list and group keys are sealed with a vault key stored in the OS keychain (Electron `safeStorage`); opened attachments are wiped on exit |
+| App | Electron sandbox, context isolation, strict CSP, no navigation or pop-ups, attachments are never rendered as documents |
+
+**Known limits** – please read them:
+
+- Peers you are connected to can see your **IP address** (true for every P2P app).
+- Messages are **signed**: whoever has a copy can prove which identity key wrote it. They are not deniable.
+- A removed member keeps what they received **before** removal.
+- Offline delivery needs at least one group member to be online.
+- For calls, WebRTC asks a public **STUN** server for your public address (address lookup only, no content);
+  you can change it or add your own TURN server under ⚙ → *Network*.
+- The code has **not been audited** by a third party.
+
+## Noise suppression
+
+Measured inside the app (offline rendering, clean speech plus noise from the DeepFilterNet repository):
+
+| Filter | Pink noise, 10 dB SNR | Real-world noise, 5 dB SNR | CPU (Ryzen 7 7800X3D) |
 |---|---|---|---|
-| DeepFilterNet3 | −25 dB in Sprechpausen | −9 dB | ~7 % eines Kerns |
-| RNNoise | −22 dB | – (Ausreißer) | ~1 % |
+| DeepFilterNet3 | −25 dB in speech pauses | −9 dB | ~7 % of one core |
+| RNNoise | −22 dB | – | ~1 % |
+
+The DeepFilterNet3 model and WebAssembly runtime are downloaded once at build time
+(`scripts/fetch-models.mjs`) and pinned by SHA-256. Nothing is loaded from the network at runtime.
+
+## Architecture
+
+```
+Renderer (Svelte, sandboxed)  ──IPC──  Electron main (thin shell)  ──pipe──  Bare worker (P2P)
+  UI, WebRTC, audio pipeline           app:// + p2pfile:// protocols        Corestore, Hyperswarm,
+                                        screen capture, keychain             Autobase, blind pairing
+```
+
+| Part | File | Role |
+|---|---|---|
+| Group logic | `workers/space.js` | Encrypted Autobase per group or DM; `apply()` enforces membership and roles deterministically on every peer |
+| Backend | `workers/app.js` | Identity, groups, key rotation, files, RPC |
+| Presence | `workers/presence.js` | Protomux channel: online state, voice state, WebRTC signaling |
+| Vault | `workers/vault.js` | At-rest encryption of local secrets |
+| Schema | `schema.js` → `spec/` | HyperSchema / HyperDB / HyperDispatch (generated) |
+| Calls | `renderer/src/lib/voice/` | Mesh peer connections (perfect negotiation), mic chain, Opus tuning |
+| UI | `renderer/src/components/` | Rail · channel list · call · chat · dialogs · settings |
+
+## Building from source
+
+Requirements: **Node.js ≥ 22** and **npm** (not pnpm), git. On Linux also FUSE 2 for AppImages.
+
+```sh
+git clone https://github.com/LouBoi161/p2pcord.git
+cd p2pcord
+npm install --ignore-scripts        # npm ≥ 12: add --allow-git=all (Electron Forge pulls a git dependency)
+node node_modules/electron/install.js
+npm start                           # builds the UI and starts the app
+```
+
+| Command | Result |
+|---|---|
+| `npm start` | Development run (data in `~/.config/P2Pcord-dev`) |
+| `npm run start:peer -- /tmp/peer2` | A second instance with its own identity, for testing |
+| `npm test` | Backend tests against a local DHT testnet |
+| `npm run make` | Linux: AppImage + zip in `out/make/` |
+| `npm run make:win` | Windows zip (also works as a cross-build from Linux) |
+| `npx electron-forge make --targets @electron-forge/maker-zip` | macOS zip (run on a Mac) |
+
+Testing without speakers or a real microphone: `P2PCORD_FAKE_MEDIA=1 npm run start:peer -- /tmp/a`.
+
+Every push is tested in CI; tagged releases are built on GitHub Actions for Linux, Windows and macOS.
 
 ## Roadmap
 
-- OTA-Updates aktivieren (`pear touch`, Multisig), macOS-Build
-- Globales Push-to-Talk (auch wenn ein Spiel im Vordergrund ist)
-- Optionaler Always-on-Knoten (z. B. Raspberry Pi) für Offline-Nachrichten
-- Reaktionen, Tipp-Anzeige, Mobile
+- Peer-to-peer auto updates (pear-runtime OTA with multisig)
+- Global push-to-talk while a game has focus
+- Optional always-on peer (e.g. a Raspberry Pi) for offline delivery
+- Reactions, typing indicator, mobile apps
+
+## License
+
+[Apache-2.0](LICENSE). Third-party components are listed in [NOTICE](NOTICE).
+
+The source is mirrored on [GitLab](https://gitlab.com/louiswalder6/p2pcord).

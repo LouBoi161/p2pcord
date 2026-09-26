@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=P2Pcord
+GenericName=Voice & Text Chat
+Comment=Serverless, end-to-end encrypted voice, video and text chat
+Exec=p2pcord %U
+Icon=p2pcord
+Terminal=false
+Categories=Network;Chat;InstantMessaging;
+Keywords=chat;voice;discord;teamspeak;p2p;call;
+StartupWMClass=P2Pcord
+StartupNotify=true

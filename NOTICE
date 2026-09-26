@@ -1,0 +1,19 @@
+P2Pcord
+Copyright 2026 louiswalder6 and contributors
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product bundles or builds on third-party software:
+
+- Holepunch / Pear stack (autobase, corestore, hyperswarm, hyperdht, hypercore,
+  hyperblobs, hyperdb, blind-pairing, pear-runtime, bare, ...) – Apache-2.0 / MIT
+  https://github.com/holepunchto
+- Electron – MIT – https://www.electronjs.org
+- Svelte, Vite – MIT
+- DeepFilterNet3 model and libDF – MIT OR Apache-2.0 – https://github.com/Rikorose/DeepFilterNet
+  (downloaded at build time by scripts/fetch-models.mjs, pinned by SHA-256)
+- deepfilternet3-noise-filter (WebAssembly build of libDF) – MIT OR Apache-2.0
+- @sapphi-red/web-noise-suppressor (RNNoise) – MIT; RNNoise – BSD-3-Clause (Xiph.Org / Mozilla)
+- libsodium via sodium-native – ISC
+
+Individual licenses are included with each package in the distributed application
+(resources/app/node_modules/*/LICENSE).

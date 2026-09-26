@@ -12,7 +12,11 @@ const IGNORE = [
   /^\/schema\.js$/,
   /^\/out/,
   /^\/\.git/,
-  /^\/README\.md$/
+  /^\/README(\.de)?\.md$/,
+  /^\/CHANGELOG\.md$/,
+  /^\/(design|docs|packaging|\.github)(\/|$)/,
+  /^\/\.gitlab-ci\.yml$/,
+  /^\/-/ // stray files from mistyped shell commands
 ]
 
 module.exports = {
@@ -44,6 +48,15 @@ module.exports = {
   ],
 
   hooks: {
+    // Unsigned macOS builds need at least an ad-hoc signature to launch on Apple Silicon
+    postPackage: async (config, { platform, outputPaths }) => {
+      if (platform !== 'darwin' || process.platform !== 'darwin') return
+      const { execFileSync } = require('child_process')
+      for (const dir of outputPaths) {
+        const bundle = fs.readdirSync(dir).find((f) => f.endsWith('.app'))
+        if (bundle) execFileSync('codesign', ['--force', '--deep', '--sign', '-', path.join(dir, bundle)], { stdio: 'inherit' })
+      }
+    },
     packageAfterCopy: async (config, buildPath) => {
       if (!fs.existsSync(path.join(buildPath, 'renderer', 'dist', 'index.html'))) {
         throw new Error(`${appName}: renderer/dist missing – run "npm run build" first`)

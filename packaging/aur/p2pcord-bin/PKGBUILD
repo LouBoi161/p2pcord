@@ -1,0 +1,41 @@
+# Maintainer: louiswalder6 <38470881-louiswalder6 at users dot noreply dot gitlab dot com>
+pkgname=p2pcord-bin
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Serverless, end-to-end encrypted voice, video and text chat for friends (P2P, Holepunch stack)"
+arch=('x86_64')
+url="https://github.com/LouBoi161/p2pcord"
+license=('Apache-2.0')
+depends=('gtk3' 'nss' 'alsa-lib' 'libxss' 'libxtst' 'libdrm' 'mesa' 'at-spi2-core' 'libnotify' 'libsecret' 'xdg-utils')
+optdepends=('gnome-keyring: keep the local vault key in the system keychain (or kwallet)'
+            'kwallet: keep the local vault key in the system keychain (KDE)'
+            'xdg-desktop-portal: screen sharing on Wayland'
+            'pipewire: screen sharing on Wayland')
+provides=('p2pcord')
+conflicts=('p2pcord')
+options=('!strip' '!debug')
+source=("P2Pcord-linux-x64-${pkgver}.zip::https://github.com/LouBoi161/p2pcord/releases/download/v${pkgver}/P2Pcord-linux-x64-${pkgver}.zip"
+        'p2pcord.desktop'
+        'p2pcord.sh')
+noextract=()
+sha256sums=('75f6023cfc38737421fccabafd72d98fc034d512e86c80664658930e56fdeece'
+            '5c95a5c31dab4502601b83300d9ca46370d3ff240bd5fd184bf79715d2b30c1a'
+            'cffcfcd9f6657e614b66bc0db9af115f69ad820d9d88efe156106b33834a19c2')
+
+package() {
+  install -d "$pkgdir/opt/p2pcord"
+  cp -a "$srcdir/P2Pcord-linux-x64/." "$pkgdir/opt/p2pcord/"
+  chmod 4755 "$pkgdir/opt/p2pcord/chrome-sandbox"
+
+  install -Dm755 "$srcdir/p2pcord.sh" "$pkgdir/usr/bin/p2pcord"
+  install -Dm644 "$srcdir/p2pcord.desktop" "$pkgdir/usr/share/applications/p2pcord.desktop"
+
+  local icons="$srcdir/P2Pcord-linux-x64/resources/app/build"
+  for size in 16 32 64 128 256 512; do
+    install -Dm644 "$icons/icon/icon-${size}x${size}.png" "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/p2pcord.png"
+  done
+  install -Dm644 "$icons/icon.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/p2pcord.svg"
+
+  install -Dm644 "$pkgdir/opt/p2pcord/resources/app/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 "$pkgdir/opt/p2pcord/resources/app/NOTICE" "$pkgdir/usr/share/licenses/$pkgname/NOTICE"
+}

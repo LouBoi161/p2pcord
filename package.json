@@ -18,7 +18,7 @@
     "start:peer": "electron-forge start -- --no-updates --storage",
     "test": "brittle-node test/*.test.js",
     "package": "npm run build && electron-forge package",
-    "make": "npm run build && electron-forge make --targets pear-electron-forge-maker-appimage",
+    "make": "npm run build && electron-forge make --targets pear-electron-forge-maker-appimage && electron-forge make --skip-package --targets @electron-forge/maker-zip",
     "make:win": "npm run build && electron-forge make --platform win32 --targets @electron-forge/maker-zip"
   },
   "imports": {
@@ -82,5 +82,13 @@
     "test-tmp": "^1.4.0",
     "typescript": "^5.9.3",
     "vite": "^8.3.1"
+  },
+  "homepage": "https://github.com/LouBoi161/p2pcord",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LouBoi161/p2pcord.git"
+  },
+  "bugs": {
+    "url": "https://github.com/LouBoi161/p2pcord/issues"
   }
 }

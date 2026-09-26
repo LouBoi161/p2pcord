@@ -1,0 +1,8 @@
+# Backend tests on every push (the desktop builds run on GitHub Actions)
+test:
+  image: node:24
+  script:
+    - npm ci --ignore-scripts
+    - npm test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event"
