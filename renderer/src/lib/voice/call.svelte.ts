@@ -397,23 +397,38 @@ function renegotiateAll (kind: Kind, stream: MediaStream | null) {
   }
 }
 
+function openCamera (deviceId: string) {
+  return navigator.mediaDevices.getUserMedia({
+    video: {
+      deviceId: deviceId ? { exact: deviceId } : undefined,
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+      frameRate: { ideal: 30 }
+    }
+  })
+}
+
 export async function startCamera () {
   if (!voice.active) return
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        deviceId: settings.videoDevice ? { exact: settings.videoDevice } : undefined,
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-        frameRate: { ideal: 30 }
-      }
-    })
+    let stream: MediaStream
+    try {
+      stream = await openCamera(settings.videoDevice)
+    } catch (err) {
+      // the saved camera is gone (unplugged, other USB port, ...): fall back to the default one
+      if (!settings.videoDevice || (err as Error)?.name !== 'NotFoundError' && (err as Error)?.name !== 'OverconstrainedError') throw err
+      stream = await openCamera('')
+    }
     stream.getVideoTracks()[0].contentHint = 'motion'
     voice.camera = stream
     renegotiateAll('cam', stream)
     publish()
   } catch (err) {
-    toast('Kamera nicht verfügbar: ' + errorText(err), 'error')
+    const name = (err as Error)?.name
+    if (name === 'NotFoundError') toast('Keine Kamera gefunden. Ist sie angeschlossen und von anderen Programmen freigegeben?', 'error')
+    else if (name === 'NotReadableError') toast('Die Kamera wird gerade von einem anderen Programm benutzt.', 'error')
+    else if (name === 'NotAllowedError') toast('Kein Zugriff auf die Kamera erlaubt.', 'error')
+    else toast('Kamera nicht verfügbar: ' + errorText(err), 'error')
   }
 }
 
