@@ -11,7 +11,8 @@ import { iceServers } from './settings.svelte'
 const KEY = 'p2pcord:bridge-host'
 // How long a guest stays online after the phone went away (app switch, screen lock)
 const LINGER = 90 * 1000
-export const WEB_APP_URL = 'https://louiswalder6.gitlab.io/p2pcord/'
+// GitLab Pages' unique domain: an origin of its own, so no other page can read the account in localStorage
+export const WEB_APP_URL = 'https://p2pcord-9e78a7.gitlab.io/'
 
 export interface BridgeCode {
   code: string

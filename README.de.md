@@ -60,7 +60,7 @@ Lade die passende Datei aus dem [neuesten Release](https://github.com/LouBoi161/
 | Windows 10/11 (x64) | `P2Pcord-win32-x64-<version>.zip` | ⚠️ experimentell, unsigniert |
 | macOS (Apple Silicon) | `P2Pcord-darwin-arm64-<version>.zip` | ⚠️ experimentell, unsigniert |
 | Android 10+ | `P2Pcord-<version>-android-arm64-v8a.apk` (alte Handys: `armeabi-v7a`) | 🧪 neu |
-| iPhone / iPad | Web-App: [louiswalder6.gitlab.io/p2pcord](https://louiswalder6.gitlab.io/p2pcord/) | 🧪 neu, braucht eine Brücke |
+| iPhone / iPad | Web-App: [p2pcord-9e78a7.gitlab.io](https://p2pcord-9e78a7.gitlab.io/) | 🧪 neu, braucht eine Brücke |
 
 ### Linux – AppImage
 

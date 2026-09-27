@@ -7,7 +7,7 @@ test:
   rules:
     - if: $CI_PIPELINE_SOURCE =~ /^(push|merge_request_event|web|api)$/
 
-# The iPhone web app on GitLab Pages: https://louiswalder6.gitlab.io/p2pcord/
+# The iPhone web app on GitLab Pages: https://p2pcord-9e78a7.gitlab.io/ (unique domain)
 pages:
   image: node:24
   script:
