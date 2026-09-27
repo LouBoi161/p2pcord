@@ -3,6 +3,7 @@
   import Logo from './Logo.svelte'
   import { ui, groups, dms, openView, spaceUnread } from '../lib/state.svelte'
   import { voice } from '../lib/voice/call.svelte'
+  import { spaceMenu } from '../lib/menus'
 
   let homeUnread = $derived(dms().some((s) => spaceUnread(s)))
 
@@ -29,7 +30,7 @@
   {#each groups() as space (space.id)}
     <div class="item" class:active={ui.view === space.id}>
       <span class="pill" class:unread={spaceUnread(space) && ui.view !== space.id}></span>
-      <button class="icon" title={space.name} onclick={() => openView(space.id)}>
+      <button class="icon" title={space.name} onclick={() => openView(space.id)} oncontextmenu={(e) => spaceMenu(e, space)}>
         {initials(space.name)}
         {#if voice.active?.space === space.id}
           <span class="in-voice"><Icon name="volume" size={10} stroke={3} /></span>
@@ -74,7 +75,7 @@
     width: 4px;
     height: 0;
     border-radius: 0 4px 4px 0;
-    background: #fff;
+    background: var(--text-strong);
     transform: translateY(-50%);
     transition: height 0.15s;
   }
@@ -107,7 +108,7 @@
   .item.active .icon {
     border-radius: 16px;
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
   }
   .icon.home {
     --logo-cut: var(--bg-main);
@@ -145,5 +146,18 @@
     display: grid;
     place-items: center;
     color: #fff;
+  }
+
+  :global([data-layout='teamspeak']) .icon {
+    border-radius: 10px;
+    width: 44px;
+    height: 44px;
+  }
+  :global([data-layout='teamspeak']) .rail {
+    width: 64px;
+    min-width: 64px;
+  }
+  :global([data-layout='teamspeak']) .item {
+    width: 64px;
   }
 </style>

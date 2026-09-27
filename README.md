@@ -40,6 +40,10 @@ friends directly. There is no server that can go down, get hacked or read along.
 - **Camera** (720p) and **screen sharing** (up to 1080p60 / 1440p30)
 - **Key rotation**: removing someone moves the group to fresh keys automatically, so they are really out
 - **Safety numbers** to verify contacts, desktop notifications and sounds
+- **Streams on demand**: watch only what you click, per-viewer quality, pop-out windows, stream audio
+  (Windows; Linux via PipeWire)
+- **Two layouts** (like Discord or like TeamSpeak 6), color themes, custom colors, profile pictures,
+  right-click menus everywhere
 
 <p align="center"><img src="docs/screenshots/settings.png" width="720" alt="Voice settings with AI noise suppression"></p>
 
@@ -62,6 +66,10 @@ Download the file for your system from the
 chmod +x P2Pcord-*-x64.AppImage
 ./P2Pcord-*-x64.AppImage
 ```
+
+The AppImage **updates itself**: new versions are downloaded in the background, checked against the signed
+release checksums and installed in place – a click on *Restart* starts the new version. The AppImage's folder
+must be writable for that (e.g. `~/Applications`). All other installs show a notice when an update is out.
 
 To get it into your app menu, either use a tool such as
 [Gear Lever](https://flathub.org/apps/it.mijorus.gearlever) or AppImageLauncher, or do it by hand:
@@ -137,6 +145,7 @@ and the `p2pcord` command. Once it is on the AUR, `yay -S p2pcord-bin` will do t
 | Joining | Blind pairing: an invite code contains no keys; an online member checks expiry, uses and the joiner's signature |
 | Removing members | The group moves to a new base with fresh keys; every remaining member gets an invite sealed to their identity key (`crypto_box_seal`), restricted to the member list |
 | Local data | Identity, group list and group keys are sealed with a vault key stored in the OS keychain (Electron `safeStorage`); opened attachments are wiped on exit |
+| Updates | The AppImage only installs a release whose `SHA256SUMS` carries a valid Ed25519 signature of the release key built into the app, and only if the file's SHA-256 matches |
 | App | Electron sandbox, context isolation, strict CSP, no navigation or pop-ups, attachments are never rendered as documents |
 
 **Known limits** – please read them:
@@ -147,6 +156,8 @@ and the `p2pcord` command. Once it is on the AUR, `yay -S p2pcord-bin` will do t
 - Offline delivery needs at least one group member to be online.
 - For calls, WebRTC asks a public **STUN** server for your public address (address lookup only, no content);
   you can change it or add your own TURN server under ⚙ → *Network*.
+- Every 6 hours the app asks the **GitHub API** for the latest release (GitHub sees your IP address).
+  Start it with `--no-updates` to turn that off.
 - The code has **not been audited** by a third party.
 
 ## Noise suppression
@@ -198,6 +209,7 @@ npm start                           # builds the UI and starts the app
 | `npm test` | Backend tests against a local DHT testnet |
 | `npm run make` | Linux: AppImage + zip in `out/make/` |
 | `npm run make:win` | Windows zip (also works as a cross-build from Linux) |
+| `node scripts/release-sums.mjs` | Signed `SHA256SUMS` + `SHA256SUMS.sig` for a release (needs the release key) |
 | `npx electron-forge make --targets @electron-forge/maker-zip` | macOS zip (run on a Mac) |
 
 Testing without speakers or a real microphone: `P2PCORD_FAKE_MEDIA=1 npm run start:peer -- /tmp/a`.
@@ -206,7 +218,7 @@ Every push is tested in CI; tagged releases are built on GitHub Actions for Linu
 
 ## Roadmap
 
-- Peer-to-peer auto updates (pear-runtime OTA with multisig)
+- Automatic updates for the Windows and macOS builds
 - Global push-to-talk while a game has focus
 - Optional always-on peer (e.g. a Raspberry Pi) for offline delivery
 - Reactions, typing indicator, mobile apps

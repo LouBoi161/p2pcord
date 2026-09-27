@@ -17,17 +17,18 @@ const {
 } = require('electron')
 const fs = require('fs')
 const crypto = require('crypto')
+const { spawn } = require('child_process')
 const path = require('path')
 const { pathToFileURL } = require('url')
 const PearRuntime = require('pear-runtime')
+const { createUpdater, installMode } = require('./updater')
 const FramedStream = require('framed-stream')
 const { isMac, isLinux, isWindows } = require('which-runtime')
 
 const pkg = require('../package.json')
-const { productName, version, upgrade } = pkg
+const { productName, version } = pkg
 
 const APP_WORKER = '/workers/main.js'
-const UPDATER_WORKER = '/workers/updater.js'
 const UI_ORIGIN = 'app://p2pcord'
 const UI_DIR = path.join(__dirname, '..', 'renderer', 'dist')
 
@@ -74,13 +75,6 @@ function getStorageDir () {
   if (flags.storage) return path.resolve(flags.storage)
   if (!app.isPackaged) return path.join(app.getPath('appData'), productName + '-dev')
   return app.getPath('userData')
-}
-
-function getAppPath () {
-  if (!app.isPackaged) return null
-  if (isLinux && process.env.APPIMAGE) return process.env.APPIMAGE
-  if (isWindows) return process.execPath
-  return path.join(process.resourcesPath, '..', '..')
 }
 
 const appStorage = () => path.join(getStorageDir(), 'app-storage')
@@ -158,52 +152,65 @@ ipcMain.handle('worker:send', (evt, data) => {
   return getAppWorker().write(Buffer.from(data))
 })
 
-// ---- OTA updater (only with a real upgrade key) ----
+// ---- updates (see updater.js) ----
 
-function hasUpgradeKey () {
-  try {
-    require('pear-link').parse(upgrade)
-    return true
-  } catch {
-    return false
-  }
-}
+let updater = null
 
 function startUpdater () {
-  if (!flags.updates || !app.isPackaged || !hasUpgradeKey()) return null
-  const extension = isLinux ? '.AppImage' : isMac ? '.app' : '.msix'
-  const worker = PearRuntime.run(require.resolve('..' + UPDATER_WORKER), [
-    flags.updates,
+  if (!flags.updates || !app.isPackaged) return
+  updater = createUpdater({
+    fetch: net.fetch,
     version,
-    upgrade,
-    productName + extension,
-    getStorageDir(),
-    getAppPath()
-  ])
-  const pipe = new FramedStream(worker)
-  pipe.on('data', (data) => {
-    const message = data.toString()
-    if (message === 'updated') sendToAll('app:update-ready', true)
+    mode: installMode({ platform: process.platform, appImage: process.env.APPIMAGE, execPath: process.execPath }),
+    appImage: process.env.APPIMAGE,
+    onState: (state) => sendToAll('app:update-state', state)
   })
-  worker.stderr.on('data', (data) => process.stderr.write(data))
-  app.once('before-quit', () => pipe.destroy())
-  ipcMain.handle('app:apply-update', () => new Promise((resolve, reject) => {
-    const onData = (data) => {
-      const message = data.toString()
-      if (message === 'pear:updateApplied') resolve(true)
-      else if (message.startsWith('pear:updateFailed')) reject(new Error(message))
-      else return
-      pipe.off('data', onData)
+  updater.start()
+  app.once('before-quit', () => updater.stop())
+}
+
+ipcMain.handle('app:update-state', () => updater ? updater.state : { status: 'disabled' })
+ipcMain.handle('app:check-updates', () => updater ? updater.check({ manual: true }) : { status: 'disabled' })
+
+// app.relaunch() does not survive an AppImage: its helper runs from the
+// mount, which disappears when we quit. A shell outside the mount waits for
+// this process to exit (it holds the single-instance lock) and then starts
+// the AppImage file, which may just have been replaced by an update.
+function relaunchAppImage (file) {
+  const env = { ...process.env }
+  const mount = env.APPDIR
+  const cwd = env.OWD || app.getPath('home')
+  for (const key of ['APPDIR', 'APPIMAGE', 'ARGV0', 'OWD']) delete env[key]
+  if (mount) {
+    for (const key of ['PATH', 'LD_LIBRARY_PATH', 'XDG_DATA_DIRS', 'GSETTINGS_SCHEMA_DIR']) {
+      if (env[key] == null) continue
+      env[key] = env[key].split(':').filter((p) => p && !p.startsWith(mount)).join(':')
+      if (!env[key]) delete env[key]
     }
-    pipe.on('data', onData)
-    pipe.write('pear:applyUpdate')
-  }))
-  return pipe
+  }
+  // Electron leaves many descriptors inheritable, among them the old mount;
+  // they are closed first, or that mount would stay busy forever. dash can
+  // only close fds 0-9, so this needs bash (present on practically every distro).
+  const script = [
+    'for fd in /proc/$$/fd/*; do n=${fd##*/}; [ "$n" -gt 2 ] && eval "exec $n>&-"; done 2>/dev/null',
+    'i=0; while kill -0 "$1" 2>/dev/null && [ $i -lt 300 ]; do sleep 0.2; i=$((i+1)); done',
+    'shift; exec "$@"'
+  ].join('\n')
+  const shell = ['/bin/bash', '/usr/bin/bash'].find((f) => fs.existsSync(f))
+  if (!shell) return false
+  spawn(shell, ['-c', script, 'p2pcord-relaunch', String(process.pid), file, ...process.argv.slice(1)], {
+    detached: true,
+    stdio: 'ignore',
+    cwd,
+    env
+  }).unref()
+  return true
 }
 
 ipcMain.handle('app:relaunch', () => {
   if (isLinux && process.env.APPIMAGE) {
-    app.relaunch({ execPath: process.env.APPIMAGE, args: ['--appimage-extract-and-run', ...process.argv.slice(1)] })
+    // without bash the user starts the app again by hand
+    relaunchAppImage(process.env.APPIMAGE)
   } else if (!isWindows) {
     app.relaunch()
   }
@@ -272,6 +279,76 @@ ipcMain.handle('screen:select', (evt, id) => {
   return true
 })
 
+// ---- stream audio on Linux ----
+// Chromium cannot capture system audio on Linux. venmic (also used by Vesktop)
+// creates a virtual PipeWire microphone and links other applications' output
+// into it - never our own audio process, so friends do not hear themselves.
+
+let venmic = null
+function patchBay () {
+  if (!isLinux) return null
+  if (venmic !== null) return venmic || null
+  venmic = false
+  try {
+    const dir = path.dirname(require.resolve('@vencord/venmic/package.json'))
+    const { PatchBay } = require(path.join(dir, 'prebuilds', `venmic-addon-linux-${process.arch}`, 'node-napi-v7.node'))
+    if (PatchBay.hasPipeWire()) venmic = new PatchBay()
+  } catch (err) {
+    console.warn('[venmic] not available:', err.message)
+  }
+  return venmic || null
+}
+
+function audioServicePid () {
+  const m = app.getAppMetrics().find((p) => p.type === 'Utility' && p.name === 'Audio Service')
+  return m ? String(m.pid) : null
+}
+
+ipcMain.handle('stream-audio:available', () => !!patchBay())
+
+ipcMain.handle('stream-audio:apps', () => {
+  const bay = patchBay()
+  if (!bay) return []
+  const own = audioServicePid()
+  const seen = new Set()
+  const out = []
+  for (const node of bay.list(['application.name', 'application.process.binary', 'application.process.id'])) {
+    const name = node['application.name'] || node['application.process.binary']
+    if (!name || node['application.process.id'] === own || seen.has(name)) continue
+    seen.add(name)
+    out.push({ name, binary: node['application.process.binary'] || '' })
+  }
+  return out
+})
+
+// app: null = everything except P2Pcord itself
+ipcMain.handle('stream-audio:start', (evt, appName) => {
+  const bay = patchBay()
+  if (!bay) return false
+  const own = audioServicePid()
+  const exclude = own ? [{ 'application.process.id': own }] : []
+  const data = {
+    exclude,
+    ignore_devices: true,
+    only_speakers: true,
+    only_default_speakers: true,
+    // Chromium's own record stream is redirected to the virtual mic
+    workaround: own ? [{ 'application.process.id': own, 'media.name': 'RecordStream' }] : []
+  }
+  if (typeof appName === 'string' && appName) data.include = [{ 'application.name': appName }]
+  return bay.link(data)
+})
+
+ipcMain.handle('stream-audio:unmute', () => {
+  patchBay()?.unmute()
+  return true
+})
+
+ipcMain.handle('stream-audio:stop', () => {
+  patchBay()?.unlink()
+  return true
+})
+
 function resolveCached (rel) {
   if (typeof rel !== 'string') return null
   const root = filesDir()
@@ -282,12 +359,14 @@ function resolveCached (rel) {
 
 // ---- window ----
 
+let mainWindow = null
+
 async function createWindow () {
   const win = new BrowserWindow({
     width: 1360,
     height: 840,
-    minWidth: 960,
-    minHeight: 560,
+    minWidth: 640,
+    minHeight: 480,
     backgroundColor: '#1e1f22',
     autoHideMenuBar: true,
     title: flags.storage ? `${productName} (${path.basename(flags.storage)})` : productName,
@@ -303,15 +382,75 @@ async function createWindow () {
     }
   })
 
+  mainWindow = win
+
   // No navigation away from the app, no new windows; links go to the browser
   win.webContents.on('will-navigate', (evt, url) => {
     if (!url.startsWith(UI_ORIGIN + '/')) evt.preventDefault()
   })
-  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  // Only stream pop-outs: blank same-origin windows the UI fills itself
+  win.webContents.setWindowOpenHandler(({ url, frameName }) => {
+    if (url !== 'about:blank' || !/^p2pcord-stream-[0-9a-f]{1,16}$/.test(frameName)) return { action: 'deny' }
+    return {
+      action: 'allow',
+      overrideBrowserWindowOptions: {
+        width: 1280,
+        height: 720,
+        minWidth: 320,
+        minHeight: 180,
+        backgroundColor: '#000000',
+        autoHideMenuBar: true,
+        icon: path.join(__dirname, '..', 'build', 'icon.png'),
+        webPreferences: { sandbox: true, nodeIntegration: false, contextIsolation: true, backgroundThrottling: false }
+      }
+    }
+  })
+  win.webContents.on('did-create-window', (child) => {
+    child.setMenu(null)
+    child.webContents.on('will-navigate', (evt) => evt.preventDefault())
+    child.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  })
+  // pop-outs belong to the main window
+  win.on('closed', () => {
+    for (const other of BrowserWindow.getAllWindows()) if (!other.isDestroyed()) other.destroy()
+  })
   win.webContents.on('render-process-gone', (evt, details) => console.error('[renderer] gone:', details))
+  win.webContents.on('context-menu', (evt, params) => showNativeMenu(win, params))
 
   await win.loadURL(UI_ORIGIN + '/index.html')
   if (!app.isPackaged && process.env.P2PCORD_DEVTOOLS) win.webContents.openDevTools({ mode: 'detach' })
+}
+
+// Right-clicks the UI does not handle itself (it calls preventDefault for its
+// own menus): text fields get spelling suggestions and cut/copy/paste,
+// selected text gets "copy".
+function showNativeMenu (win, params) {
+  const items = []
+  if (params.isEditable) {
+    for (const word of params.dictionarySuggestions.slice(0, 5)) {
+      items.push({ label: word, click: () => win.webContents.replaceMisspelling(word) })
+    }
+    if (params.misspelledWord) {
+      items.push({
+        label: 'Zum Wörterbuch hinzufügen',
+        click: () => win.webContents.session.addWordToSpellCheckerDictionary(params.misspelledWord)
+      })
+    }
+    if (items.length) items.push({ type: 'separator' })
+    const f = params.editFlags
+    items.push(
+      { label: 'Rückgängig', role: 'undo', enabled: f.canUndo },
+      { label: 'Wiederholen', role: 'redo', enabled: f.canRedo },
+      { type: 'separator' },
+      { label: 'Ausschneiden', role: 'cut', enabled: f.canCut },
+      { label: 'Kopieren', role: 'copy', enabled: f.canCopy },
+      { label: 'Einfügen', role: 'paste', enabled: f.canPaste },
+      { label: 'Alles auswählen', role: 'selectAll', enabled: f.canSelectAll }
+    )
+  } else if (params.selectionText && params.selectionText.trim()) {
+    items.push({ label: 'Kopieren', role: 'copy' })
+  }
+  if (items.length) Menu.buildFromTemplate(items).popup({ window: win })
 }
 
 function setupSession () {
@@ -374,8 +513,8 @@ if (!lock) {
   app.quit()
 } else {
   app.on('second-instance', () => {
-    const [win] = BrowserWindow.getAllWindows()
-    if (win) {
+    const win = mainWindow
+    if (win && !win.isDestroyed()) {
       if (win.isMinimized()) win.restore()
       win.focus()
     }

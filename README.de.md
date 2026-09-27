@@ -40,6 +40,10 @@ deine Freunde direkt miteinander. Es gibt keinen Server, der ausfallen, gehackt 
 - **Kamera** (720p) und **Bildschirm teilen** (bis 1080p60 / 1440p30)
 - **Schlüsselrotation**: Wer entfernt wird, ist wirklich draußen – die Gruppe zieht automatisch auf neue Schlüssel um
 - **Sicherheitsnummern** zum Prüfen von Kontakten, Desktop-Benachrichtigungen, Töne
+- **Streams auf Klick**: Du siehst nur, was du anklickst, Qualität pro Zuschauer, Pop-out-Fenster, Stream-Ton
+  (Windows; Linux über PipeWire)
+- **Zwei Layouts** (wie Discord oder wie TeamSpeak 6), Farbthemes, eigene Farben, Profilbilder,
+  Rechtsklick-Menüs überall
 
 ## Installation
 
@@ -59,6 +63,11 @@ Lade die passende Datei aus dem [neuesten Release](https://github.com/LouBoi161/
 chmod +x P2Pcord-*-x64.AppImage
 ./P2Pcord-*-x64.AppImage
 ```
+
+Das AppImage **aktualisiert sich selbst**: Neue Versionen werden im Hintergrund geladen, gegen die signierten
+Prüfsummen des Releases geprüft und direkt ersetzt – ein Klick auf *Neu starten* startet die neue Version. Dafür
+muss der Ordner des AppImages beschreibbar sein (z. B. `~/Applications`). Alle anderen Installationen zeigen nur
+einen Hinweis, wenn ein Update da ist.
 
 Ins Startmenü bekommst du es mit [Gear Lever](https://flathub.org/apps/it.mijorus.gearlever) oder
 AppImageLauncher – oder von Hand:
@@ -133,6 +142,7 @@ Startmenü-Eintrag und dem Befehl `p2pcord`. Sobald es im AUR ist, geht das auch
 | Beitritt | Blind Pairing: Codes enthalten keine Schlüssel; ein Mitglied prüft Ablauf, Nutzungen und Signatur |
 | Entfernen | Die Gruppe zieht auf eine neue Base mit neuen Schlüsseln; jedes verbleibende Mitglied bekommt eine an seinen Identitätsschlüssel versiegelte Einladung (`crypto_box_seal`), beschränkt auf die Mitgliederliste |
 | Lokale Daten | Identität, Gruppenliste und Gruppenschlüssel sind mit einem Tresor-Schlüssel aus dem System-Schlüsselbund versiegelt (Electron `safeStorage`); geöffnete Anhänge werden beim Beenden gelöscht |
+| Updates | Das AppImage installiert nur Releases, deren `SHA256SUMS` eine gültige Ed25519-Signatur des in der App hinterlegten Release-Schlüssels trägt, und nur wenn die SHA-256 der Datei stimmt |
 | App | Electron-Sandbox, Context Isolation, strikte CSP, keine Navigation/Popups, Anhänge nie als Dokument |
 
 **Bekannte Grenzen** – bitte lesen:
@@ -143,6 +153,8 @@ Startmenü-Eintrag und dem Befehl `p2pcord`. Sobald es im AUR ist, geht das auch
 - Nachrichten an Offline-Leute brauchen mindestens ein Mitglied, das online ist.
 - Für Anrufe fragt WebRTC einen öffentlichen **STUN**-Server nach deiner Adresse (nur Adresse, keine Inhalte);
   änderbar unter ⚙ → *Netzwerk*, optional mit eigenem TURN-Server.
+- Alle 6 Stunden fragt die App die **GitHub-API** nach dem neuesten Release (GitHub sieht dabei deine IP-Adresse).
+  Mit `--no-updates` gestartet, lässt sie das.
 - Der Code wurde **nicht unabhängig geprüft** (kein Audit).
 
 ## Rauschunterdrückung
@@ -171,6 +183,7 @@ npm start
 | `npm test` | Backend-Tests gegen ein lokales DHT-Testnetz |
 | `npm run make` | Linux: AppImage + ZIP in `out/make/` |
 | `npm run make:win` | Windows-ZIP (auch als Cross-Build unter Linux) |
+| `node scripts/release-sums.mjs` | Signierte `SHA256SUMS` + `SHA256SUMS.sig` für ein Release (braucht den Release-Schlüssel) |
 | `npx electron-forge make --targets @electron-forge/maker-zip` | macOS-ZIP (auf einem Mac) |
 
 Mehr zu Architektur und Details steht in der [englischen README](README.md#architecture).

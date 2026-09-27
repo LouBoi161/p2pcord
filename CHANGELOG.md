@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+- The AppImage updates itself: new releases are downloaded in the background, verified against the signed
+  `SHA256SUMS` and installed with one click on *Restart*; other installs show a notice
+- *Check for updates* in the settings sidebar
+- Voice no longer sounds choppy: the voice gate runs on the audio thread with 30 ms lookahead, hysteresis and a
+  longer hold; the mic chain gets a larger buffer while AI noise suppression runs; optional receive buffer
+- Streams are opt-in: click *Watch stream* to see one, stop watching any time; nothing is sent to people
+  who do not watch
+- Per-viewer stream quality (source, 1080p … 360p), stream volume and mute, pop-out window for streams
+- Stream audio on Linux via PipeWire (venmic), without your own call audio; audio toggle when sharing
+- Screen sharing keeps the monitor's shape (portrait, 4:3, ultrawide) instead of squeezing it into 16:9
+- Call tiles adapt to the window shape; call and chat stack on narrow or portrait windows; chat, channel
+  list and channel sections can be collapsed; minimum window size 640 × 480
+- Right-click menus everywhere: messages (copy text/selection/link, quote, reply, edit, delete), people
+  (volume, mute for me, stream options, profile), channels, groups, direct messages; spelling suggestions
+  and cut/copy/paste in text fields
+- Layouts like Discord or like TeamSpeak 6, asked on first start; seven color themes, custom colors,
+  shareable theme codes, message styles (cozy, bubbles, compact), zoom
+- New sound set with three sound packs, more events (stream start, viewers, ringback while calling, lost
+  connection, push-to-talk), volume and per-event switches; sounds follow the output device
+- Profile pictures (crop and zoom, shared only with friends, cached for offline) and avatar colors
+- Fix: two people joining a voice channel at the same moment did not connect
+
 ## v0.1.1
 
 - Remove friends from the DM list or the chat header, including entries still waiting for the friend code to be redeemed

@@ -1,18 +1,23 @@
 // Microphone pipeline:
 //   getUserMedia (48 kHz mono, WebRTC echo cancellation, browser NS off)
 //     -> input gain -> AI noise suppression (DeepFilterNet3 | RNNoise | off)
-//     -> level meter / voice activity -> gate -> MediaStreamDestination
-// The voice gate runs after the suppressor, so background noise never opens it.
+//     -> voice gate worklet (level meter, VAD, lookahead) -> MediaStreamDestination
+// The voice gate runs after the suppressor, so background noise never opens it,
+// and on the audio thread, so a busy UI can never delay or chop the voice.
 import { DeepFilterNet3Core } from 'deepfilternet3-noise-filter'
 import { RnnoiseWorkletNode, loadRnnoise } from '@sapphi-red/web-noise-suppressor'
 import rnnoiseWorkletUrl from '@sapphi-red/web-noise-suppressor/rnnoiseWorklet.js?url'
 import rnnoiseWasmUrl from '@sapphi-red/web-noise-suppressor/rnnoise.wasm?url'
 import rnnoiseSimdUrl from '@sapphi-red/web-noise-suppressor/rnnoise_simd.wasm?url'
+import gateWorkletUrl from './gate.worklet.js?url'
 import { settings, type NoiseMode } from '../settings.svelte'
 
 const DFN3_ASSETS = new URL('dfn3', location.href).href.replace(/\/$/, '')
 const SAMPLE_RATE = 48000
-const VAD_HOLD_MS = 350
+// The suppressors process 10 ms frames on the audio thread. With the smallest
+// hardware buffer a slow frame means a dropout in what the others hear, so
+// the context gets a bit of headroom whenever a suppressor may run.
+const LATENCY_WITH_SUPPRESSOR = 0.04
 
 let dfn3: DeepFilterNet3Core | null = null
 let dfn3Loading: Promise<DeepFilterNet3Core> | null = null
@@ -67,37 +72,51 @@ export class Mic {
   level = -100
   speaking = false
   muted = false
-  pttDown = false
   onchange: (() => void) | null = null
 
+  private _ptt = false
   private source: MediaStreamAudioSourceNode | null = null
   private input: GainNode | null = null
   private suppressor: AudioNode | null = null
-  private analyser: AnalyserNode | null = null
-  private gate: GainNode | null = null
+  private gate: AudioWorkletNode | null = null
   private dest: MediaStreamAudioDestinationNode | null = null
-  private timer: ReturnType<typeof setInterval> | null = null
-  private lastVoice = 0
-  private buf = new Float32Array(1024)
+  private sync: ReturnType<typeof setInterval> | null = null
+  private sent = ''
+
+  get pttDown () {
+    return this._ptt
+  }
+
+  set pttDown (down: boolean) {
+    if (this._ptt === down) return
+    this._ptt = down
+    this.pushGate()
+  }
 
   async start () {
-    this.ctx = new AudioContext({ sampleRate: SAMPLE_RATE, latencyHint: 'interactive' })
+    this.ctx = new AudioContext({
+      sampleRate: SAMPLE_RATE,
+      latencyHint: settings.noise === 'off' ? 'interactive' : LATENCY_WITH_SUPPRESSOR
+    })
+    await this.ctx.audioWorklet.addModule(gateWorkletUrl)
     this.input = this.ctx.createGain()
-    this.analyser = this.ctx.createAnalyser()
-    this.analyser.fftSize = 1024
-    this.gate = this.ctx.createGain()
-    this.gate.gain.value = 0
+    this.gate = new AudioWorkletNode(this.ctx, 'p2pcord-voice-gate', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1] })
+    this.gate.port.onmessage = ({ data }) => this.onGate(data)
+    // mono track: the stereo Opus mode negotiated for screen audio stays mono for voice
     this.dest = this.ctx.createMediaStreamDestination()
-    this.analyser.connect(this.gate)
+    this.dest.channelCount = 1
+    this.dest.channelCountMode = 'explicit'
     this.gate.connect(this.dest)
 
     await this.openDevice()
     await this.setNoise(settings.noise)
     this.setInputGain(settings.inputGain)
+    this.pushGate()
 
     this.stream = this.dest.stream
     this.track = this.stream.getAudioTracks()[0]
-    this.timer = setInterval(() => this.tick(), 20)
+    // settings (threshold, input mode) may change at any time; mute and PTT push immediately
+    this.sync = setInterval(() => this.pushGate(), 200)
   }
 
   async openDevice () {
@@ -134,8 +153,8 @@ export class Mic {
       if (this.suppressor instanceof RnnoiseWorkletNode) this.suppressor.destroy()
     }
     this.suppressor = node
-    if (node) this.input!.connect(node).connect(this.analyser!)
-    else this.input!.connect(this.analyser!)
+    if (node) this.input!.connect(node).connect(this.gate!)
+    else this.input!.connect(this.gate!)
     this.activeNoise = mode
     this.onchange?.()
   }
@@ -151,21 +170,21 @@ export class Mic {
   setMuted (muted: boolean) {
     this.muted = muted
     if (this.track) this.track.enabled = !muted
+    this.pushGate()
   }
 
-  private tick () {
-    if (!this.analyser || !this.gate || !this.ctx) return
-    this.level = dbfs(this.analyser, this.buf)
-    const now = performance.now()
-    let open: boolean
-    if (this.muted) open = false
-    else if (settings.inputMode === 'ptt') open = this.pttDown
-    else {
-      if (this.level > settings.vadThreshold) this.lastVoice = now
-      open = now - this.lastVoice < VAD_HOLD_MS
-    }
-    this.gate.gain.setTargetAtTime(open ? 1 : 0, this.ctx.currentTime, open ? 0.005 : 0.05)
-    const speaking = open && this.level > settings.vadThreshold - 6
+  private pushGate () {
+    if (!this.gate) return
+    const mode = this.muted ? 'closed' : settings.inputMode === 'ptt' ? (this._ptt ? 'open' : 'closed') : 'vad'
+    const key = mode + ':' + settings.vadThreshold
+    if (key === this.sent) return
+    this.sent = key
+    this.gate.port.postMessage({ mode, threshold: settings.vadThreshold })
+  }
+
+  private onGate ({ level, open }: { level: number; open: boolean }) {
+    this.level = level
+    const speaking = open && level > settings.vadThreshold - 6
     if (speaking !== this.speaking) {
       this.speaking = speaking
       this.onchange?.()
@@ -173,50 +192,23 @@ export class Mic {
   }
 
   async stop () {
-    if (this.timer) clearInterval(this.timer)
-    this.timer = null
+    if (this.sync) clearInterval(this.sync)
+    this.sync = null
     this.raw?.getTracks().forEach((t) => t.stop())
     this.track?.stop()
     if (this.suppressor instanceof RnnoiseWorkletNode) this.suppressor.destroy()
+    if (this.gate) this.gate.port.onmessage = null
     await this.ctx?.close().catch(() => {})
     this.ctx = null
     this.raw = null
     this.stream = null
     this.track = null
     this.suppressor = null
+    this.gate = null
+    this.sent = ''
     this.speaking = false
     this.level = -100
   }
 }
 
-// Short UI sounds synthesized on the fly (no audio assets needed)
-let sfxCtx: AudioContext | null = null
-export function playSound (kind: string) {
-  if (!settings.sounds) return
-  try {
-    sfxCtx ??= new AudioContext()
-    const ctx = sfxCtx
-    const tones: Record<string, number[]> = {
-      join: [523, 784],
-      leave: [784, 523],
-      mute: [440],
-      unmute: [660],
-      message: [880, 1175],
-      ring: [659, 784, 988, 784]
-    }
-    const seq = tones[kind] || [600]
-    seq.forEach((freq, i) => {
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-      const t = ctx.currentTime + i * 0.09
-      osc.type = 'sine'
-      osc.frequency.value = freq
-      gain.gain.setValueAtTime(0, t)
-      gain.gain.linearRampToValueAtTime(0.08, t + 0.01)
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.16)
-      osc.connect(gain).connect(ctx.destination)
-      osc.start(t)
-      osc.stop(t + 0.18)
-    })
-  } catch {}
-}
+export { playSound } from './sounds'

@@ -13,18 +13,39 @@
   import { memberName } from './lib/state.svelte'
   import { playSound } from './lib/voice/audio'
   import { bridge } from './lib/rpc'
-
-  let updateReady = $state(false)
+  import { update } from './lib/update.svelte'
+  import ContextMenu from './components/ContextMenu.svelte'
+  import TsNav from './components/TsNav.svelte'
+  import DesignWelcome from './components/DesignWelcome.svelte'
+  import { settings, saveSettings } from './lib/settings.svelte'
 
   setSoundPlayer(playSound)
   initVoice()
   boot()
-  bridge.onUpdateReady(() => (updateReady = true))
 
-  async function applyUpdate () {
-    await bridge.applyUpdate()
-    await bridge.relaunch()
+  const u = $derived(update.state)
+  // Portrait, 4:3 or simply small windows: call on top, chat below instead of side by side
+  let winW = $state(window.innerWidth)
+  let winH = $state(window.innerHeight)
+  const ts = $derived(settings.layout === 'teamspeak')
+  const stacked = $derived(ts || winW < 1180 || winW < winH * 1.25)
+  const narrow = $derived(winW < 820)
+
+  // Ctrl +/-/0 zoom (there is no app menu providing these)
+  function onKey (e: KeyboardEvent) {
+    if (!e.ctrlKey || e.altKey) return
+    let v = settings.uiScale
+    if (e.key === '+' || e.key === '=') v = Math.min(1.5, v + 0.1)
+    else if (e.key === '-') v = Math.max(0.75, v - 0.1)
+    else if (e.key === '0') v = 1
+    else return
+    e.preventDefault()
+    settings.uiScale = Math.round(v * 100) / 100
+    saveSettings()
+    window.p2p.setZoom(settings.uiScale)
   }
+
+  const showUpdate = $derived(!update.dismissed && (u.status === 'ready' || u.status === 'downloading' || u.status === 'available' || (u.status === 'error' && !u.quiet)))
 </script>
 
 <div class="app">
@@ -44,21 +65,50 @@
   {:else if !ui.name}
     <Onboarding />
   {:else}
-    <Rail />
-    <Sidebar />
-    {#if voice.active}
-      <CallView />
-    {/if}
-    <Chat compact={!!voice.active} />
+    <div class="row">
+      {#if ts}
+        <TsNav />
+      {:else}
+        <Rail />
+      {/if}
+      <!-- TeamSpeak: direct messages live in the navigator, the channel column is only for groups -->
+      {#if !settings.sidebarHidden && !(narrow && voice.active) && !(ts && ui.view === 'home')}
+        <Sidebar />
+      {/if}
+      <div class="main" class:stacked class:in-call={!!voice.active}>
+        {#if voice.active}
+          <CallView />
+        {/if}
+        {#if !voice.active || settings.callChat}
+          <Chat compact={!!voice.active} {stacked} />
+        {/if}
+      </div>
+    </div>
+    {#if !settings.designChosen}<DesignWelcome />{/if}
   {/if}
 </div>
 
+<svelte:window bind:innerWidth={winW} bind:innerHeight={winH} onkeydown={onKey} />
+<ContextMenu />
+
 <Dialogs />
 
-{#if updateReady}
-  <div class="update">
-    Ein Update ist bereit.
-    <button class="btn small" onclick={applyUpdate}>Neu starten</button>
+{#if showUpdate}
+  <div class="update" class:error={u.status === 'error'} role="status">
+    {#if u.status === 'ready'}
+      <span>P2Pcord {u.latest} ist installiert.</span>
+      <button class="btn small" onclick={() => bridge.relaunch()}>Neu starten</button>
+    {:else if u.status === 'downloading'}
+      <span>Update auf {u.latest} wird geladen… {Math.round((u.progress ?? 0) * 100)} %</span>
+    {:else if u.status === 'available' && u.mode === 'package'}
+      <span>P2Pcord {u.latest} ist da – aktualisiere über deinen Paketmanager (z. B. <code>paru</code>).</span>
+    {:else if u.status === 'available'}
+      <span>P2Pcord {u.latest} ist verfügbar.</span>
+      <button class="btn small" onclick={() => bridge.openExternal(u.url!)}>Herunterladen</button>
+    {:else}
+      <span>Update fehlgeschlagen: {u.error}</span>
+    {/if}
+    <button class="close" title="Schließen" aria-label="Schließen" onclick={() => (update.dismissed = true)}><Icon name="x" size={16} /></button>
   </div>
 {/if}
 
@@ -84,9 +134,23 @@
 <style>
   .app {
     display: flex;
+    flex-direction: column;
     height: 100vh;
     width: 100vw;
     overflow: hidden;
+  }
+  .row {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+  }
+  .main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+  }
+  .main.stacked.in-call {
+    flex-direction: column;
   }
   .splash {
     flex: 1;
@@ -157,6 +221,25 @@
     gap: 12px;
     z-index: 150;
     font-weight: 500;
+    max-width: calc(100vw - 32px);
+  }
+  .update.error {
+    background: var(--red);
+  }
+  .update code {
+    font-family: var(--mono);
+  }
+  .update .close {
+    display: grid;
+    place-items: center;
+    padding: 2px;
+    border-radius: 4px;
+    color: inherit;
+    opacity: 0.8;
+  }
+  .update .close:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.15);
   }
   .incoming {
     position: fixed;

@@ -22,8 +22,12 @@
   } from '../lib/state.svelte'
   import { voice, joinVoice } from '../lib/voice/call.svelte'
   import { renderText, isEmojiOnly, formatTime, formatDay, formatStamp } from '../lib/format'
+  import { openMenu } from '../lib/menu.svelte'
+  import { userMenu, copy } from '../lib/menus'
+  import { settings, saveSettings } from '../lib/settings.svelte'
+  import { nameColor } from '../lib/colors'
 
-  let { compact = false }: { compact?: boolean } = $props()
+  let { compact = false, stacked = false }: { compact?: boolean; stacked?: boolean } = $props()
 
   let space = $derived(ui.chat ? ui.spaces[ui.chat.space] : undefined)
   let channel = $derived(space?.channels.find((c) => c.id === ui.chat?.channel))
@@ -62,6 +66,17 @@
 
   $effect(() => {
     if (ui.chat && !ui.dialog) tick().then(() => input?.focus())
+  })
+
+  // The chat shrinks when a call opens (or the window changes): stay at the newest message
+  $effect(() => {
+    if (!scroller) return
+    const el = scroller
+    const ro = new ResizeObserver(() => {
+      if (stick) el.scrollTop = el.scrollHeight
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
   })
 
   async function onScroll () {
@@ -241,6 +256,44 @@
     return !m.base || m.base === space?.baseId
   }
 
+  function messageMenu (e: MouseEvent, m: Message) {
+    if (!space) return
+    const target = e.target as HTMLElement
+    // right-click on a name or avatar: the person, not the message
+    if (target.closest('.author, .avatar')) return userMenu(e, m.author, space.id)
+    const link = target.closest('a[data-href]') as HTMLAnchorElement | null
+    const article = target.closest('article')
+    const sel = window.getSelection()
+    const selected = sel && !sel.isCollapsed && article && article.contains(sel.anchorNode) ? sel.toString() : ''
+    const own = m.author === ui.me
+    const editable = own && !!m.text && current(m)
+    const removable = current(m) && (own || space.role >= ROLE_ADMIN)
+    openMenu(e, [
+      selected && { label: 'Auswahl kopieren', icon: 'copy', action: () => copy(selected) },
+      link && { label: 'Link kopieren', icon: 'link', action: () => copy(link.dataset.href!, 'Link kopiert') },
+      link && { label: 'Link öffnen', icon: 'external-link', action: () => (ui.dialog = { type: 'link', url: link.dataset.href }) },
+      (selected || link) && { type: 'sep' },
+      { label: 'Antworten', icon: 'reply', action: () => { replyTo = m; input?.focus() } },
+      editable && { label: 'Bearbeiten', icon: 'edit', action: () => startEdit(m) },
+      m.text && { label: 'Text kopieren', icon: 'copy', action: () => copy(m.text) },
+      m.text && { label: 'Zitieren', icon: 'chat', action: () => quote(m) },
+      { type: 'sep' },
+      { label: 'Zeitpunkt kopieren', action: () => copy(new Date(m.ts).toLocaleString('de-DE')) },
+      { label: 'Nachrichten-ID kopieren', action: () => copy(m.id, 'ID kopiert') },
+      removable && { type: 'sep' },
+      removable && { label: 'Nachricht löschen', icon: 'trash', danger: true, action: () => remove(m) }
+    ])
+  }
+
+  function quote (m: Message) {
+    const lines = m.text.split('\n').map((l) => '> ' + l).join('\n')
+    text = (text ? text + '\n' : '') + lines + '\n'
+    tick().then(() => {
+      autosize()
+      input?.focus()
+    })
+  }
+
   function snippet (id: string | null) {
     if (!id) return null
     return messages.find((m) => m.id === id) || null
@@ -250,6 +303,7 @@
 <section
   class="chat"
   class:compact
+  class:stacked
   ondragenter={(e) => { if (e.dataTransfer?.types.includes('Files')) dragging++ }}
   ondragleave={() => dragging = Math.max(0, dragging - 1)}
   ondragover={(e) => e.preventDefault()}
@@ -259,6 +313,9 @@
 >
   {#if space && channel}
     <header>
+      <button class="icon-btn fold-side" title={settings.sidebarHidden ? 'Kanalliste einblenden' : 'Kanalliste ausblenden'} onclick={() => { settings.sidebarHidden = !settings.sidebarHidden; saveSettings() }}>
+        <Icon name="panel-left" size={18} />
+      </button>
       {#if isDm}
         <Avatar id={partner?.identity || space.id} name={title} size={24} status={partner ? (isOnline(partner.identity) ? 'online' : 'offline') : null} />
       {:else}
@@ -301,7 +358,7 @@
           <div class="day"><span>{formatDay(m.ts)}</span></div>
         {/if}
         {@const reply = snippet(m.replyTo)}
-        <article class="msg" class:grouped={grouped(messages, i)} class:mention={false}>
+        <article class="msg" class:compact-msg={settings.messageStyle === 'compact'} class:bubble={settings.messageStyle === 'bubbles'} class:grouped={settings.messageStyle !== 'compact' && grouped(messages, i)} class:mention={false} oncontextmenu={(e) => messageMenu(e, m)}>
           {#if m.replyTo}
             <div class="reply-ref">
               <span class="reply-line"></span>
@@ -313,12 +370,15 @@
               {/if}
             </div>
           {/if}
-          {#if grouped(messages, i)}
+          {#if settings.messageStyle === 'compact'}
+            <span class="ctime" title={new Date(m.ts).toLocaleString('de-DE')}>{formatTime(m.ts)}</span>
+            <span class="author" style="color:{nameColor(m.author)}">{memberName(space, m.author)}</span>
+          {:else if grouped(messages, i)}
             <span class="gutter-time">{formatTime(m.ts)}</span>
           {:else}
             <div class="avatar"><Avatar id={m.author} name={memberName(space, m.author)} size={40} /></div>
             <div class="meta">
-              <span class="author">{memberName(space, m.author)}</span>
+              <span class="author" style={settings.messageStyle === 'bubbles' ? `color:${nameColor(m.author)}` : ''}>{memberName(space, m.author)}</span>
               <span class="time" title={new Date(m.ts).toLocaleString('de-DE')}>{formatStamp(m.ts)}</span>
             </div>
           {/if}
@@ -407,7 +467,8 @@
   .chat {
     position: relative;
     flex: 1;
-    min-width: 360px;
+    min-width: 300px;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     background: var(--bg-main);
@@ -416,6 +477,14 @@
     flex: 0 0 420px;
     width: 420px;
     border-left: 1px solid var(--border);
+  }
+  .chat.compact.stacked {
+    flex: 0 0 42%;
+    width: auto;
+    min-width: 0;
+    min-height: 200px;
+    border-left: 0;
+    border-top: 1px solid var(--border);
   }
   header {
     height: 48px;
@@ -437,6 +506,10 @@
   }
   .spacer {
     flex: 1;
+  }
+  .fold-side {
+    margin-left: -8px;
+    width: 28px;
   }
   .messages {
     flex: 1;
@@ -463,15 +536,15 @@
     border-radius: 50%;
     display: grid;
     place-items: center;
-    background: #41434a;
-    color: #fff;
+    background: var(--bg-secondary);
+    color: var(--text-strong);
   }
   .day {
     display: flex;
     align-items: center;
     margin: 16px 16px 8px;
     height: 0;
-    border-top: 1px solid #3f4147;
+    border-top: 1px solid var(--divider);
     justify-content: center;
   }
   .day span {
@@ -493,7 +566,7 @@
     min-height: 0;
   }
   .msg:hover {
-    background: rgba(2, 2, 2, 0.06);
+    background: color-mix(in srgb, var(--text-muted) 7%, transparent);
   }
   .avatar {
     position: absolute;
@@ -541,12 +614,12 @@
   .text :global(code) {
     font-family: var(--mono);
     font-size: 85%;
-    background: #2b2d31;
+    background: var(--bg-code);
     padding: 2px 4px;
     border-radius: 3px;
   }
   .text :global(pre) {
-    background: #2b2d31;
+    background: var(--bg-code);
     border: 1px solid var(--border);
     border-radius: 4px;
     padding: 8px;
@@ -558,15 +631,21 @@
     background: none;
     padding: 0;
   }
+  .text :global(.quote) {
+    display: block;
+    border-left: 4px solid var(--text-faint);
+    padding-left: 10px;
+    color: var(--text-muted);
+  }
   .text :global(.spoiler) {
-    background: #1e1f22;
+    background: var(--bg-rail);
     color: transparent;
     border-radius: 3px;
     cursor: pointer;
   }
   .text :global(.spoiler.revealed) {
     color: inherit;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--bg-hover);
   }
   .edited {
     font-size: 11px;
@@ -588,8 +667,8 @@
     top: 9px;
     width: 30px;
     height: 12px;
-    border-left: 2px solid #4e5058;
-    border-top: 2px solid #4e5058;
+    border-left: 2px solid var(--divider);
+    border-top: 2px solid var(--divider);
     border-top-left-radius: 6px;
   }
   .reply-text {
@@ -624,7 +703,7 @@
     color: var(--text);
   }
   .actions .danger:hover {
-    color: #f23f42;
+    color: var(--red-text);
   }
   .edit {
     width: 100%;
@@ -641,6 +720,72 @@
     color: var(--text-muted);
     margin-top: 4px;
   }
+  /* bubbles: TeamSpeak 6 style, every message in its own box under name and date */
+  .msg.bubble {
+    padding-top: 3px;
+    padding-bottom: 3px;
+  }
+  .msg.bubble:hover {
+    background: none;
+  }
+  .bubble .author {
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .bubble .text {
+    display: inline-block;
+    max-width: 100%;
+    background: var(--bg-input);
+    padding: 5px 10px;
+    border-radius: 6px;
+    margin-top: 2px;
+  }
+  .msg.bubble:hover .text {
+    background: color-mix(in srgb, var(--bg-input) 85%, var(--text) 8%);
+  }
+  .bubble .text.jumbo {
+    background: none;
+    padding: 0;
+  }
+  .bubble .body :global(.card),
+  .bubble .body :global(.media) {
+    padding: 6px;
+    background: var(--bg-input);
+    border-radius: 6px;
+  }
+
+  /* compact: one line per message, like IRC or the TeamSpeak chat; wrapped lines hang under the text */
+  .msg.compact-msg {
+    margin-top: 0;
+    min-height: 0;
+    padding: 1px 48px 1px 16px;
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    column-gap: 6px;
+    align-items: baseline;
+  }
+  .compact-msg .reply-ref {
+    grid-column: 1 / -1;
+  }
+  .compact-msg .reply-line {
+    display: none;
+  }
+  .compact-msg .ctime {
+    font-size: 11px;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+  }
+  .compact-msg .author {
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .compact-msg .author::after {
+    content: ':';
+    color: var(--text-muted);
+  }
+  .compact-msg .text.jumbo {
+    font-size: 22px;
+  }
   .bottom-pad {
     height: 24px;
   }
@@ -651,7 +796,7 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    background: #2b2d31;
+    background: var(--bg-sidebar);
     padding: 4px 8px 4px 16px;
     border-radius: 8px 8px 0 0;
     font-size: 13px;
@@ -661,7 +806,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    background: #2b2d31;
+    background: var(--bg-sidebar);
     padding: 10px 12px;
     border-radius: 8px 8px 0 0;
   }
@@ -728,7 +873,7 @@
   }
   .dropzone > div {
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     border-radius: 12px;
     padding: 32px 40px;
     text-align: center;

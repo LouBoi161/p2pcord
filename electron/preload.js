@@ -1,5 +1,5 @@
 // The only bridge between the sandboxed UI and the rest of the app.
-const { contextBridge, ipcRenderer, webUtils } = require('electron')
+const { contextBridge, ipcRenderer, webUtils, webFrame } = require('electron')
 
 contextBridge.exposeInMainWorld('p2p', {
   info: () => ipcRenderer.sendSync('app:info'),
@@ -21,11 +21,20 @@ contextBridge.exposeInMainWorld('p2p', {
   saveFile: (rel, name) => ipcRenderer.invoke('file:save', rel, name),
   screenSources: () => ipcRenderer.invoke('screen:sources'),
   selectScreen: (id) => ipcRenderer.invoke('screen:select', id),
-  onUpdateReady: (listener) => {
-    const wrap = () => listener()
-    ipcRenderer.on('app:update-ready', wrap)
-    return () => ipcRenderer.removeListener('app:update-ready', wrap)
+  streamAudio: {
+    available: () => ipcRenderer.invoke('stream-audio:available'),
+    apps: () => ipcRenderer.invoke('stream-audio:apps'),
+    start: (app) => ipcRenderer.invoke('stream-audio:start', app),
+    unmute: () => ipcRenderer.invoke('stream-audio:unmute'),
+    stop: () => ipcRenderer.invoke('stream-audio:stop')
   },
-  applyUpdate: () => ipcRenderer.invoke('app:apply-update'),
-  relaunch: () => ipcRenderer.invoke('app:relaunch')
+  onUpdateState: (listener) => {
+    const wrap = (evt, state) => listener(state)
+    ipcRenderer.on('app:update-state', wrap)
+    return () => ipcRenderer.removeListener('app:update-state', wrap)
+  },
+  updateState: () => ipcRenderer.invoke('app:update-state'),
+  checkUpdates: () => ipcRenderer.invoke('app:check-updates'),
+  relaunch: () => ipcRenderer.invoke('app:relaunch'),
+  setZoom: (factor) => webFrame.setZoomFactor(Math.min(2, Math.max(0.5, Number(factor) || 1)))
 })

@@ -44,8 +44,8 @@
     display: grid;
     place-items: center;
     background:
-      radial-gradient(circle at 20% 20%, rgba(88, 101, 242, 0.35), transparent 50%),
-      radial-gradient(circle at 80% 80%, rgba(35, 165, 90, 0.25), transparent 50%),
+      radial-gradient(circle at 20% 20%, color-mix(in srgb, var(--accent) 35%, transparent), transparent 50%),
+      radial-gradient(circle at 80% 80%, color-mix(in srgb, var(--green) 25%, transparent), transparent 50%),
       var(--bg-rail);
   }
   .card {

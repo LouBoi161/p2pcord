@@ -25,7 +25,15 @@ export function renderText (text: string): string {
       out += `<pre><code>${escape(parts[i].replace(/\n$/, ''))}</code></pre>`
       continue
     }
-    const segs = escape(parts[i]).split(/`([^`\n]+)`/g)
+    // "> text" lines are quotes; the line break after one is taken by the block itself
+    const lines = escape(parts[i]).split('\n')
+    let quoted = ''
+    lines.forEach((line, n) => {
+      const q = /^&gt; ?(.*)$/.exec(line)
+      if (q) quoted += `<span class="quote">${q[1]}</span>`
+      else quoted += line + (n < lines.length - 1 ? '\n' : '')
+    })
+    const segs = quoted.split(/`([^`\n]+)`/g)
     out += segs.map((seg, j) => (j % 2 === 1 ? `<code>${seg}</code>` : inline(seg))).join('')
   }
   return out.replace(/\n/g, '<br>')

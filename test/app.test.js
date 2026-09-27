@@ -144,3 +144,48 @@ test('friends can be removed, also while the invite is still pending', async (t)
   await a2.ready()
   t.is((await a2.init()).spaces.length, 0)
 })
+
+test('profile pictures reach friends, are verified and cached for offline', async (t) => {
+  const testnet = await createTestnet(3, { teardown: t.teardown })
+  const dirB = await tmp(t)
+  const { app: a } = createApp(t, testnet, await tmp(t))
+  const { app: b } = createApp(t, testnet, dirB)
+  await a.ready()
+  await b.ready()
+
+  const png = crypto.randomBytes(2000).toString('base64') // content is not decoded by the backend
+  const own = await a.setAvatar({ data: png, mime: 'image/png', color: '#ff8800' })
+  t.ok(own.url.startsWith('data:image/png;base64,'))
+  t.is(own.color, '#ff8800')
+  await t.exception(a.setAvatar({ data: png, mime: 'text/html' }), /BAD_IMAGE/)
+  await t.exception(a.setAvatar({ data: crypto.randomBytes(60 * 1024).toString('base64'), mime: 'image/png' }), /IMAGE_TOO_LARGE/)
+
+  const ia = (await a.init()).identity
+  const gotAvatar = waitFor(b, 'avatar', (d) => d.identity === ia && !!d.url)
+  const dm = await a.createSpace({ kind: 1 })
+  await b.joinSpace({ code: await a.createInvite({ id: dm.id }) })
+  const got = await gotAvatar
+  t.is(got.url, own.url)
+  t.is(b.presence.snapshot()[ia].color, '#ff8800')
+
+  // A picture that does not match the announced hash is ignored
+  const events = []
+  b.on('rpc-event', (e) => e.event === 'avatar' && events.push(e))
+  b.presence._onmessage(ia, Buffer.from(JSON.stringify({ t: 'avatar', hash: b.presence.peers.get(ia).state.avatar, mime: 'image/png', data: crypto.randomBytes(100).toString('base64') })))
+  t.is(events.length, 0)
+
+  // b restarts while a is gone: the picture is still there
+  await a.close()
+  await b.close()
+  const { app: b2 } = createApp(t, testnet, dirB)
+  await b2.ready()
+  t.is((await b2.init()).avatars[ia], own.url)
+
+  // Removing the picture propagates as well
+  const { app: a2 } = createApp(t, testnet, a.storage)
+  await a2.ready()
+  const removed = waitFor(b2, 'avatar', (d) => d.identity === ia && d.url === null)
+  await a2.setAvatar({ data: null })
+  await removed
+  t.absent((await b2.init()).avatars[ia])
+})

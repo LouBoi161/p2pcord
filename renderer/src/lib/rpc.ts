@@ -1,4 +1,5 @@
 // JSON-RPC to the Bare backend worker via the preload bridge.
+import type { UpdateState } from './update.svelte'
 
 export interface ScreenSource {
   id: string
@@ -18,9 +19,18 @@ interface Bridge {
   saveFile(rel: string, name: string): Promise<boolean>
   screenSources(): Promise<ScreenSource[]>
   selectScreen(id: string | null): Promise<boolean>
-  onUpdateReady(listener: () => void): () => void
-  applyUpdate(): Promise<boolean>
+  streamAudio: {
+    available(): Promise<boolean>
+    apps(): Promise<{ name: string; binary: string }[]>
+    start(app: string | null): Promise<boolean>
+    unmute(): Promise<boolean>
+    stop(): Promise<boolean>
+  }
+  onUpdateState(listener: (state: UpdateState) => void): () => void
+  updateState(): Promise<UpdateState>
+  checkUpdates(): Promise<UpdateState>
   relaunch(): Promise<void>
+  setZoom(factor: number): void
 }
 
 declare global {

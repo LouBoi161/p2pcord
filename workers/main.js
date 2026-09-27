@@ -10,6 +10,7 @@ const App = require('./app')
 const METHODS = new Set([
   'init',
   'setName',
+  'setAvatar',
   'createSpace',
   'joinSpace',
   'cancelJoin',

@@ -15,6 +15,9 @@
     leave,
     isOnline,
     dmPartner,
+    dms,
+    openDm,
+    memberName,
     TEXT,
     VOICE,
     ROLE_ADMIN,
@@ -23,6 +26,7 @@
   } from '../lib/state.svelte'
   import { startScreen, leaveVoice, voice } from '../lib/voice/call.svelte'
   import { safetyNumber, fingerprint } from '../lib/format'
+  import { settings, saveSettings } from '../lib/settings.svelte'
 
   let d = $derived(ui.dialog)
   let space = $derived(d?.space ? ui.spaces[d.space] : undefined)
@@ -151,25 +155,39 @@
 
   // ---- screen picker ----
   let sources = $state<ScreenSource[] | null>(null)
+  let audioApps = $state<{ name: string; binary: string }[]>([])
+  let audioApp = $state('')
+  let linuxAudio = $state(false)
+  const platform = bridge.info().platform
+  const wayland = bridge.info().wayland
   onOpen('screen', () => {
     sources = null
+    audioApp = ''
+    audioApps = []
+    linuxAudio = false
+    if (platform === 'linux') {
+      bridge.streamAudio.available().then(async (ok) => {
+        linuxAudio = ok
+        if (ok) audioApps = await bridge.streamAudio.apps().catch(() => [])
+      })
+    }
+    // Wayland: the system portal shows its own picker after "Weiter"
+    if (wayland) {
+      sources = []
+      return
+    }
     bridge.screenSources().then(
-      (list) => {
-        // Wayland: the system portal already asked; one source means "use it"
-        if (list.length <= 1) {
-          close()
-          startScreen(list[0]?.id || null)
-        } else sources = list
-      },
+      (list) => (sources = list),
       (err) => {
         close()
         toast('Bildschirmliste nicht verfügbar: ' + errorText(err), 'error')
       }
     )
   })
-  function pick (id: string) {
+  function pick (id: string | null) {
+    saveSettings()
     close()
-    startScreen(id)
+    startScreen(id, { audio: settings.streamAudio && (platform !== 'linux' || linuxAudio), app: audioApp || null })
   }
 
   // ---- verify ----
@@ -404,14 +422,71 @@
       <button class="btn" onclick={() => { bridge.openExternal(d!.url); close() }}>Im Browser öffnen</button>
     {/snippet}
   </Modal>
+{:else if d?.type === 'profile'}
+  {@const pid = d.identity as string}
+  {@const pname = memberName(space, pid)}
+  {@const dm = dms().find((x) => dmPartner(x)?.identity === pid)}
+  {@const member = space?.members.find((m) => m.identity === pid)}
+  <Modal title={pname} onclose={close} width={420}>
+    <div class="prof">
+      <Avatar id={pid} name={pname} size={96} status={isOnline(pid) ? 'online' : 'offline'} />
+      <div class="prof-info">
+        <span class="mrole">{isOnline(pid) ? 'Online' : 'Offline'}{#if member && space?.kind !== KIND_DM} · {roleName(member.role)} in {space?.name}{/if}</span>
+        <span class="mono">{fingerprint(pid)}</span>
+        {#if ui.peers[pid]?.voice}
+          {@const where = ui.spaces[ui.peers[pid].voice!.space]}
+          {#if where}<span class="mrole"><Icon name="volume" size={12} /> Im Sprachkanal {where.channels.find((c) => c.id === ui.peers[pid].voice!.channel)?.name}</span>{/if}
+        {/if}
+      </div>
+    </div>
+    {#snippet footer()}
+      <button class="btn secondary" onclick={() => (ui.dialog = { type: 'verify', identity: pid, name: pname })}><Icon name="shield-check" size={16} /> Sicherheitsnummer</button>
+      <span style="flex:1"></span>
+      {#if dm}<button class="btn" onclick={() => { close(); openDm(dm.id) }}><Icon name="chat" size={16} /> Nachricht</button>{/if}
+    {/snippet}
+  </Modal>
 {:else if d?.type === 'verify'}
   <Modal title="Sicherheitsnummer" subtitle={`Vergleiche diese Nummer mit ${d.name} – am besten persönlich oder in einem Anruf. Stimmt sie überein, redest du wirklich mit ${d.name}.`} onclose={close} width={460}>
     <div class="safety">{safety}</div>
     <p class="hint center">Jeder Account ist ein Schlüsselpaar auf dem Gerät. Die Nummer ergibt sich aus euren beiden öffentlichen Schlüsseln.</p>
   </Modal>
 {:else if d?.type === 'screen'}
-  <Modal title="Bildschirm teilen" subtitle="Wähle einen Bildschirm oder ein Fenster." onclose={close} width={720}>
-    {#if !sources}
+  <Modal title="Bildschirm teilen" subtitle={wayland ? 'Dein System fragt gleich, welchen Bildschirm oder welches Fenster du teilen willst.' : 'Wähle einen Bildschirm oder ein Fenster.'} onclose={close} width={720}>
+    <div class="share-opts">
+      <label class="field">
+        <span>Qualität</span>
+        <select class="input" bind:value={settings.screenQuality}>
+          <option value="720p60">720p · 60 FPS</option>
+          <option value="1080p30">1080p · 30 FPS</option>
+          <option value="1080p60">1080p · 60 FPS</option>
+          <option value="1440p30">1440p · 30 FPS</option>
+        </select>
+      </label>
+      {#if platform === 'win32' || linuxAudio}
+        <label class="check">
+          <input type="checkbox" bind:checked={settings.streamAudio} />
+          <span>Ton mitübertragen</span>
+        </label>
+        {#if linuxAudio && settings.streamAudio}
+          <label class="field">
+            <span>Ton von</span>
+            <select class="input" bind:value={audioApp}>
+              <option value="">Allen Programmen (außer P2Pcord)</option>
+              {#each audioApps as a (a.name)}
+                <option value={a.name}>{a.name}</option>
+              {/each}
+            </select>
+          </label>
+        {/if}
+      {:else if platform === 'linux'}
+        <p class="hint">Ton mitübertragen braucht PipeWire – auf diesem System nicht gefunden.</p>
+      {:else}
+        <p class="hint">Ton mitübertragen gibt es bisher nur unter Windows und Linux.</p>
+      {/if}
+    </div>
+    {#if wayland}
+      <div class="center"><button class="btn" onclick={() => pick(null)}><Icon name="monitor-up" size={16} /> Weiter</button></div>
+    {:else if !sources}
       <div class="center"><span class="spinner"></span></div>
     {:else}
       <div class="sources">
@@ -433,6 +508,39 @@
 {/if}
 
 <style>
+  .prof {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+  }
+  .prof-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+  }
+  .prof-info .mono {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-faint);
+  }
+  .share-opts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 20px;
+    margin-bottom: 8px;
+  }
+  .share-opts .field {
+    margin-bottom: 8px;
+    min-width: 200px;
+  }
+  .check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
   .codebox {
     height: auto;
     padding: 10px;

@@ -70,6 +70,8 @@ export interface Voice {
 export interface Peer {
   name: string
   voice: Voice | null
+  avatar?: string | null // hash
+  color?: string
 }
 
 export interface Toast {
@@ -96,8 +98,36 @@ export const ui = $state({
   toasts: [] as Toast[],
   messages: {} as Record<string, Message[]>,
   hasMore: {} as Record<string, boolean>,
-  dialog: null as null | { type: string; [k: string]: any }
+  dialog: null as null | { type: string; [k: string]: any },
+  avatars: {} as Record<string, string>, // identity -> image URL (data:)
+  colors: loadColors() as Record<string, string>, // identity -> chosen avatar color
+  myColor: ''
 })
+
+function loadColors (): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem('p2pcord:colors') || '{}')
+  } catch {
+    return {}
+  }
+}
+
+// Friends' avatar colors are remembered, so offline friends keep theirs
+function rememberColors () {
+  let changed = false
+  for (const [id, p] of Object.entries(ui.peers)) {
+    const c = p.color || ''
+    if ((ui.colors[id] || '') === c) continue
+    if (c) ui.colors[id] = c
+    else delete ui.colors[id]
+    changed = true
+  }
+  if (changed) {
+    try {
+      localStorage.setItem('p2pcord:colors', JSON.stringify(ui.colors))
+    } catch {}
+  }
+}
 
 function loadReads (): Record<string, number> {
   try {
@@ -145,6 +175,8 @@ export function errorText (err: unknown): string {
     BACKEND_EXITED: 'Das Backend wurde beendet.',
     ABORTED: 'Abgebrochen.',
     NOT_ALLOWED: 'Dafür brauchst du Admin-Rechte.',
+    BAD_IMAGE: 'Dieses Bildformat wird nicht unterstützt.',
+    IMAGE_TOO_LARGE: 'Das Bild ist auch verkleinert noch zu groß.',
     VAULT_KEYRING: 'Der Schlüsselbund deines Systems konnte den P2Pcord-Tresor nicht entsperren. Melde dich neu an oder entsperre den Schlüsselbund (z. B. GNOME „Passwörter und Schlüssel“) und starte P2Pcord neu.',
     VAULT_LOCKED: 'Deine lokalen P2Pcord-Daten sind verschlüsselt, aber der passende Schlüssel fehlt. Wurde der Schlüsselbund zurückgesetzt? Deine Daten wurden nicht verändert.'
   }
@@ -303,7 +335,8 @@ function onSpace (state: Space) {
 }
 
 function notify (space: Space, channel: Channel) {
-  if (settings.sounds && notifySound) notifySound('message')
+  if (settings.mutedChats[space.id] || settings.mutedChats[space.id + ':' + channel.id]) return
+  if (settings.sounds && notifySound) notifySound(space.kind === KIND_DM ? 'dm' : 'message')
   if (!settings.notifications || document.hasFocus()) return
   try {
     const who = memberName(space, channel.latest!.author)
@@ -329,6 +362,11 @@ export async function boot () {
   })
   on('peers', (peers) => {
     ui.peers = peers
+    rememberColors()
+  })
+  on('avatar', ({ identity, url }) => {
+    if (url) ui.avatars[identity] = url
+    else delete ui.avatars[identity]
   })
   on('fatal', (msg) => {
     ui.status = 'fatal'
@@ -348,6 +386,9 @@ export async function boot () {
     ui.peers = init.peers
     ui.loadingSpaces = init.loading
     ui.vault = init.vault || 'none'
+    ui.avatars = init.avatars || {}
+    ui.myColor = init.color || ''
+    rememberColors()
     for (const s of init.spaces) onSpace(s)
     ui.status = 'ready'
     openView(groups()[0]?.id || 'home')
@@ -358,6 +399,13 @@ export async function boot () {
 }
 
 // ---- actions ----
+
+export async function setAvatar (data: string | null | undefined, mime?: string, color?: string) {
+  const res = await call('setAvatar', { data, mime, color })
+  if (res.url) ui.avatars[ui.me] = res.url
+  else delete ui.avatars[ui.me]
+  ui.myColor = res.color
+}
 
 export async function setName (name: string) {
   const res = await call('setName', { name })

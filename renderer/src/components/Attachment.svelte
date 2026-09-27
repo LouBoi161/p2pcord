@@ -138,7 +138,7 @@
     flex-direction: column;
   }
   .name {
-    color: #00a8fc;
+    color: var(--link);
     font-weight: 500;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -152,7 +152,7 @@
     color: var(--yellow);
   }
   .retry {
-    color: #00a8fc;
+    color: var(--link);
     font-size: 12px;
   }
 </style>

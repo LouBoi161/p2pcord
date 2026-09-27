@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { personColor } from '../lib/colors'
+  import { ui } from '../lib/state.svelte'
+
   let {
     id,
     name,
@@ -7,9 +10,8 @@
     speaking = false
   }: { id: string; name: string; size?: number; status?: 'online' | 'offline' | null; speaking?: boolean } = $props()
 
-  const palette = ['#5865f2', '#3ba55c', '#eb459e', '#faa81a', '#ed4245', '#1abc9c', '#9b59b6', '#e67e22', '#3498db', '#747f8d']
-
-  let color = $derived(palette[parseInt((id || '0').slice(0, 6), 16) % palette.length] || palette[0])
+  let color = $derived(personColor(id))
+  let image = $derived(ui.avatars[id] || null)
   let initials = $derived(
     (name || '?')
       .trim()
@@ -22,7 +24,11 @@
 </script>
 
 <div class="avatar" class:speaking style="--size:{size}px; --color:{color}">
-  <span>{initials}</span>
+  {#if image}
+    <img src={image} alt="" draggable="false" />
+  {:else}
+    <span>{initials}</span>
+  {/if}
   {#if status}
     <i class="status {status}"></i>
   {/if}
@@ -50,6 +56,13 @@
   }
   span {
     line-height: 1;
+  }
+  img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
   }
   .status {
     position: absolute;

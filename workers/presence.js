@@ -5,22 +5,32 @@
 const Protomux = require('protomux')
 const c = require('compact-encoding')
 const b4a = require('b4a')
+const crypto = require('hypercore-crypto')
 const EventEmitter = require('events')
 
 const PROTOCOL = 'p2pcord/presence/v1'
 const MAX_MESSAGE = 64 * 1024
+// Profile pictures travel as base64 in one presence message: a 256 px WebP is ~10-30 KB
+const MAX_AVATAR = 48 * 1024
+const AVATAR_TYPES = new Set(['image/webp', 'image/png', 'image/jpeg'])
+const HASH = /^[0-9a-f]{64}$/
+const COLOR = /^#[0-9a-f]{6}$/i
 
 class Presence extends EventEmitter {
   /**
    * @param {object} opts
    * @param {(identityHex: string, spaceId: string) => boolean} opts.isMember
+   * @param {(identityHex: string, hash: string) => boolean} [opts.hasAvatar] whether a picture is cached already
    */
-  constructor ({ isMember }) {
+  constructor ({ isMember, hasAvatar = () => false }) {
     super()
     this.isMember = isMember
+    this.hasAvatar = hasAvatar
     this.peers = new Map() // identityHex -> { conns: Set, state }
     this.name = ''
     this.voice = null // { space, channel, muted, deaf, video, screen }
+    this.avatar = null // { hash, mime, data (base64) }
+    this.color = ''
   }
 
   attach (conn) {
@@ -31,7 +41,7 @@ class Presence extends EventEmitter {
       onopen: () => {
         let peer = this.peers.get(identity)
         if (!peer) {
-          peer = { conns: new Set(), state: { name: '', voice: null } }
+          peer = { conns: new Set(), state: { name: '', voice: null, avatar: undefined, color: '' } }
           this.peers.set(identity, peer)
         }
         peer.conns.add(link)
@@ -76,9 +86,38 @@ class Presence extends EventEmitter {
       peer.state = {
         name: typeof msg.name === 'string' ? msg.name.slice(0, 32) : '',
         // A peer can only claim to be in a voice channel of a space it belongs to
-        voice: voice && this.isMember(identity, voice.space) ? voice : null
+        voice: voice && this.isMember(identity, voice.space) ? voice : null,
+        // undefined: an older version that knows nothing about pictures; null: no picture
+        avatar: msg.avatar === null ? null : typeof msg.avatar === 'string' && HASH.test(msg.avatar) ? msg.avatar : undefined,
+        color: typeof msg.color === 'string' && COLOR.test(msg.color) ? msg.color : ''
+      }
+      if (peer.state.avatar && !this.hasAvatar(identity, peer.state.avatar)) {
+        const [link] = peer.conns
+        try {
+          link?.send({ t: 'avatar-get', hash: peer.state.avatar })
+        } catch {}
       }
       this.emit('change')
+      if (peer.state.avatar === null) this.emit('avatar', { identity, hash: null })
+      return
+    }
+
+    if (msg.t === 'avatar-get') {
+      if (!this.avatar || msg.hash !== this.avatar.hash) return
+      const [link] = peer.conns
+      try {
+        link?.send({ t: 'avatar', hash: this.avatar.hash, mime: this.avatar.mime, data: this.avatar.data })
+      } catch {}
+      return
+    }
+
+    if (msg.t === 'avatar') {
+      // only the picture the peer announced, and only if it really is that picture
+      if (typeof msg.hash !== 'string' || msg.hash !== peer.state.avatar) return
+      if (!AVATAR_TYPES.has(msg.mime) || typeof msg.data !== 'string' || msg.data.length > MAX_AVATAR * 1.4) return
+      const bytes = b4a.from(msg.data, 'base64')
+      if (bytes.byteLength > MAX_AVATAR || b4a.toString(crypto.hash(bytes), 'hex') !== msg.hash) return
+      this.emit('avatar', { identity, hash: msg.hash, mime: msg.mime, data: msg.data })
       return
     }
 
@@ -90,7 +129,7 @@ class Presence extends EventEmitter {
 
   _stateFor (identity) {
     const voice = this.voice && this.isMember(identity, this.voice.space) ? this.voice : null
-    return { t: 'state', name: this.name, voice }
+    return { t: 'state', name: this.name, voice, avatar: this.avatar ? this.avatar.hash : null, color: this.color }
   }
 
   _sendState (identity, link) {
@@ -107,6 +146,12 @@ class Presence extends EventEmitter {
 
   setName (name) {
     this.name = name
+    this.broadcast()
+  }
+
+  setAvatar (avatar, color) {
+    this.avatar = avatar
+    this.color = color || ''
     this.broadcast()
   }
 
@@ -130,6 +175,9 @@ class Presence extends EventEmitter {
     return out
   }
 }
+
+Presence.MAX_AVATAR = MAX_AVATAR
+Presence.AVATAR_TYPES = AVATAR_TYPES
 
 function sanitizeVoice (v) {
   if (!v || typeof v !== 'object') return null

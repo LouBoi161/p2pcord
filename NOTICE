@@ -14,6 +14,8 @@ This product bundles or builds on third-party software:
 - deepfilternet3-noise-filter (WebAssembly build of libDF) – MIT OR Apache-2.0
 - @sapphi-red/web-noise-suppressor (RNNoise) – MIT; RNNoise – BSD-3-Clause (Xiph.Org / Mozilla)
 - libsodium via sodium-native – ISC
+- @vencord/venmic (Linux stream audio via PipeWire, unmodified; source in the package) – MPL-2.0 –
+  https://github.com/Vencord/venmic
 - UI icons (renderer/src/components/Icon.svelte) are based on Lucide – ISC –
   Copyright (c) Lucide Contributors, https://lucide.dev – and on Feather –
   MIT – Copyright (c) 2013-2023 Cole Bemis, https://feathericons.com

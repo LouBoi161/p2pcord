@@ -48,9 +48,15 @@ class App extends ReadyResource {
     this.store = null
     this.swarm = null
     this.pairing = null
-    this.presence = new Presence({ isMember: (identity, space) => this._isMember(identity, space) })
+    this.avatars = new Map() // identityHex -> { hash, mime, data } of other people, kept for when they are offline
+    this._avatarTimer = null
+    this.presence = new Presence({
+      isMember: (identity, space) => this._isMember(identity, space),
+      hasAvatar: (identity, hash) => this.avatars.get(identity)?.hash === hash
+    })
     this.presence.on('change', () => this.send('peers', this.presence.snapshot()))
     this.presence.on('signal', (s) => this.send('signal', s))
+    this.presence.on('avatar', (a) => this._onAvatar(a))
   }
 
   async _open () {
@@ -61,7 +67,7 @@ class App extends ReadyResource {
     if (saved && saved.secretKey) {
       const secretKey = b4a.from(saved.secretKey, 'hex')
       this.identity = { publicKey: secretKey.subarray(32), secretKey }
-      this.profile = { name: saved.name || '' }
+      this.profile = { name: saved.name || '', avatar: saved.avatar || null, color: saved.color || '' }
     } else {
       this.identity = crypto.keyPair()
     }
@@ -70,6 +76,9 @@ class App extends ReadyResource {
     await this._saveIdentity()
     await this._saveRegistry()
     this.presence.name = this.profile.name
+    this.presence.avatar = this.profile.avatar || null
+    this.presence.color = this.profile.color || ''
+    for (const [id, a] of Object.entries((await this._readJSON('avatars.json')) || {})) this.avatars.set(id, a)
 
     this.store = new Corestore(path.join(this.storage, 'corestore'))
     await this.store.ready()
@@ -94,6 +103,10 @@ class App extends ReadyResource {
 
   async _close () {
     for (const t of this._updateTimers.values()) clearTimeout(t)
+    if (this._avatarTimer) {
+      clearTimeout(this._avatarTimer)
+      await this._saveAvatars().catch(noop)
+    }
     for (const space of this.pending.values()) await space.close().catch(noop)
     for (const space of this.spaces.values()) await space.close().catch(noop)
     for (const list of this.archives.values()) for (const space of list) await space.close().catch(noop)
@@ -142,8 +155,38 @@ class App extends ReadyResource {
   _saveIdentity () {
     return this._writeJSON('identity.json', {
       secretKey: b4a.toString(this.identity.secretKey, 'hex'),
-      name: this.profile.name
+      name: this.profile.name,
+      avatar: this.profile.avatar || null,
+      color: this.profile.color || ''
     })
+  }
+
+  // ---- profile pictures ----
+
+  _onAvatar ({ identity, hash, mime, data }) {
+    if (hash) this.avatars.set(identity, { hash, mime, data })
+    else if (this.avatars.has(identity)) this.avatars.delete(identity)
+    else return
+    this.send('avatar', { identity, url: hash ? `data:${mime};base64,${data}` : null })
+    // writes are batched: several friends coming online at once is one write
+    if (!this._avatarTimer) {
+      this._avatarTimer = setTimeout(() => {
+        this._avatarTimer = null
+        this._saveAvatars().catch((err) => this._warn(err))
+      }, 2000)
+    }
+  }
+
+  _saveAvatars () {
+    return this._writeJSON('avatars.json', Object.fromEntries(this.avatars))
+  }
+
+  _avatarUrls () {
+    const out = {}
+    for (const [id, a] of this.avatars) out[id] = `data:${a.mime};base64,${a.data}`
+    const own = this.profile.avatar
+    if (own) out[b4a.toString(this.identity.publicKey, 'hex')] = `data:${own.mime};base64,${own.data}`
+    return out
   }
 
   _saveRegistry () {
@@ -346,8 +389,26 @@ class App extends ReadyResource {
       spaces,
       loading: this.registry.length - this.spaces.size,
       peers: this.presence.snapshot(),
-      vault: this.vaultMode
+      vault: this.vaultMode,
+      avatars: this._avatarUrls(),
+      color: this.profile.color || ''
     }
+  }
+
+  // data: base64 image (the UI already cropped and scaled it), null removes the picture
+  async setAvatar ({ data, mime, color }) {
+    if (typeof color === 'string') this.profile.color = /^#[0-9a-f]{6}$/i.test(color) ? color : ''
+    if (data === null) this.profile.avatar = null
+    else if (data !== undefined) {
+      if (!Presence.AVATAR_TYPES.has(mime) || typeof data !== 'string') throw new Error('BAD_IMAGE')
+      const bytes = b4a.from(data, 'base64')
+      if (bytes.byteLength > Presence.MAX_AVATAR) throw new Error('IMAGE_TOO_LARGE')
+      this.profile.avatar = { hash: b4a.toString(crypto.hash(bytes), 'hex'), mime, data: b4a.toString(bytes, 'base64') }
+    }
+    await this._saveIdentity()
+    this.presence.setAvatar(this.profile.avatar, this.profile.color)
+    const a = this.profile.avatar
+    return { url: a ? `data:${a.mime};base64,${a.data}` : null, color: this.profile.color }
   }
 
   async setName ({ name }) {

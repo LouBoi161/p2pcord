@@ -16,6 +16,7 @@ export interface Settings {
   pttKey: string // KeyboardEvent.code
   inputGain: number // 0..2
   bitrate: number // kbps for voice
+  audioBuffer: number // ms minimum jitter buffer for received audio, 0 = automatic
   screenQuality: '720p60' | '1080p30' | '1080p60' | '1440p30'
   stunServers: string[]
   turnUrl: string
@@ -24,6 +25,25 @@ export interface Settings {
   notifications: boolean
   sounds: boolean
   volumes: Record<string, number> // per identity, 0..1
+  localMutes: Record<string, boolean> // people muted only for us
+  streamVolumes: Record<string, number>
+  streamMutes: Record<string, boolean>
+  streamAudio: boolean // share sound with the screen
+  autoWatch: boolean // open other people's streams without clicking
+  viewerQuality: 'source' | '1080' | '720' | '480' | '360' // default quality we ask streamers for
+  mutedChats: Record<string, boolean> // space id or space:channel -> no sound/notification
+  callChat: boolean // chat next to (or below) an active call
+  sidebarHidden: boolean
+  collapsed: Record<string, boolean> // collapsed sidebar sections and channel trees
+  layout: 'discord' | 'teamspeak'
+  designChosen: boolean // asked once which layout the user wants
+  theme: string
+  customColors: Record<string, string>
+  messageStyle: 'cozy' | 'compact' | 'bubbles' // compact: one line per message; bubbles: TeamSpeak 6 style
+  uiScale: number
+  soundVolume: number // 0..1
+  soundPack: 'classic' | 'soft' | 'retro'
+  soundEvents: Record<string, boolean> // false = this sound is off
 }
 
 const KEY = 'p2pcord:settings'
@@ -41,6 +61,7 @@ const DEFAULTS: Settings = {
   pttKey: 'KeyV',
   inputGain: 1,
   bitrate: 96,
+  audioBuffer: 0,
   screenQuality: '1080p30',
   stunServers: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'],
   turnUrl: '',
@@ -48,7 +69,26 @@ const DEFAULTS: Settings = {
   turnPass: '',
   notifications: true,
   sounds: true,
-  volumes: {}
+  volumes: {},
+  localMutes: {},
+  streamVolumes: {},
+  streamMutes: {},
+  streamAudio: true,
+  autoWatch: false,
+  viewerQuality: 'source',
+  mutedChats: {},
+  callChat: true,
+  sidebarHidden: false,
+  collapsed: {},
+  layout: 'discord',
+  designChosen: false,
+  theme: 'discord',
+  customColors: {},
+  messageStyle: 'cozy',
+  uiScale: 1,
+  soundVolume: 0.7,
+  soundPack: 'classic',
+  soundEvents: {}
 }
 
 function load (): Settings {

@@ -1,6 +1,8 @@
 // Opus tuning. fmtp parameters in *our* description tell the remote encoder
 // what we want to receive: high bitrate, in-band FEC against packet loss, no
-// DTX (it clips the start of words), fullband.
+// DTX (it clips the start of words), fullband. Stereo is allowed so shared
+// screen audio (music, games) keeps its stereo image; voice is sent as a mono
+// track and stays mono.
 export function tuneOpus (sdp: string, kbps: number): string {
   const match = sdp.match(/a=rtpmap:(\d+) opus\/48000\/2/i)
   if (!match) return sdp
@@ -12,7 +14,8 @@ export function tuneOpus (sdp: string, kbps: number): string {
     maxaveragebitrate: String(kbps * 1000),
     maxplaybackrate: '48000',
     'sprop-maxcapturerate': '48000',
-    stereo: '0',
+    stereo: '1',
+    'sprop-stereo': '1',
     cbr: '0'
   }
   const fmtpRe = new RegExp(`a=fmtp:${pt} ([^\\r\\n]*)`, 'g')

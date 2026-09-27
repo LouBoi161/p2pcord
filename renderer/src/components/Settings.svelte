@@ -8,6 +8,11 @@
   import { Mic } from '../lib/voice/audio'
   import { voice, mic as liveMic, refreshMic, applyOutputs } from '../lib/voice/call.svelte'
   import { fingerprint } from '../lib/format'
+  import { update, checkUpdates } from '../lib/update.svelte'
+  import AppearanceSettings from './AppearanceSettings.svelte'
+  import AvatarEditor from './AvatarEditor.svelte'
+  import { playSound, soundEnabled, SOUND_EVENTS } from '../lib/voice/sounds'
+  import { VIEW_QUALITIES, QUALITY_ORDER } from '../lib/voice/call.svelte'
 
   let { tab = 'profile', onclose }: { tab?: string; onclose: () => void } = $props()
   // svelte-ignore state_referenced_locally
@@ -125,11 +130,33 @@
       <button class:active={current === 'profile'} onclick={() => (current = 'profile')}>Mein Profil</button>
       <button class:active={current === 'security'} onclick={() => (current = 'security')}>Sicherheit</button>
       <div class="group">App-Einstellungen</div>
+      <button class:active={current === 'appearance'} onclick={() => (current = 'appearance')}>Darstellung</button>
       <button class:active={current === 'voice'} onclick={() => (current = 'voice')}>Sprache & Video</button>
-      <button class:active={current === 'notify'} onclick={() => (current = 'notify')}>Benachrichtigungen</button>
+      <button class:active={current === 'streams'} onclick={() => (current = 'streams')}>Streams</button>
+      <button class:active={current === 'notify'} onclick={() => (current = 'notify')}>Benachrichtigungen & Töne</button>
       <button class:active={current === 'network'} onclick={() => (current = 'network')}>Netzwerk</button>
       <div class="sep"></div>
       <div class="version">P2Pcord {info.version}</div>
+      {#if update.state.status === 'disabled'}
+        <div class="version">Updates sind in dieser Version aus.</div>
+      {:else if update.state.status === 'checking'}
+        <div class="version">Suche nach Updates…</div>
+      {:else if update.state.status === 'downloading'}
+        <div class="version">Lade {update.state.latest}… {Math.round((update.state.progress ?? 0) * 100)} %</div>
+      {:else if update.state.status === 'ready'}
+        <button class="version link" onclick={() => bridge.relaunch()}>{update.state.latest} installiert – neu starten</button>
+      {:else if update.state.status === 'available' && update.state.mode === 'package'}
+        <div class="version">{update.state.latest} ist da – über den Paketmanager aktualisieren.</div>
+      {:else if update.state.status === 'available'}
+        <button class="version link" onclick={() => bridge.openExternal(update.state.url!)}>{update.state.latest} herunterladen</button>
+      {:else}
+        {#if update.state.status === 'current'}
+          <div class="version">Du bist auf dem neuesten Stand.</div>
+        {:else if update.state.status === 'error'}
+          <div class="version err">{update.state.error}</div>
+        {/if}
+        <button class="version link" onclick={checkUpdates}>Nach Updates suchen</button>
+      {/if}
     </div>
   </nav>
 
@@ -138,13 +165,18 @@
       {#if current === 'profile'}
         <h1>Mein Profil</h1>
         <div class="profile">
-          <Avatar id={ui.me} name={name || ui.name} size={80} />
           <div class="profile-fields">
             <label class="field">
               <span>Anzeigename</span>
               <input class="input" bind:value={name} maxlength="32" onkeydown={(e) => e.key === 'Enter' && saveName()} />
             </label>
             <button class="btn" onclick={saveName} disabled={!name.trim() || name === ui.name}>Speichern</button>
+          </div>
+        </div>
+        <div class="profile">
+          <div class="profile-fields">
+            <div class="label">Profilbild</div>
+            <AvatarEditor />
           </div>
         </div>
         <div class="card">
@@ -289,16 +321,16 @@
               <option value={128}>Studio – 128 kbps</option>
             </select>
           </label>
-          <label class="field">
-            <span>Bildschirmübertragung</span>
-            <select class="input" bind:value={settings.screenQuality} onchange={() => saveSettings()}>
-              <option value="720p60">720p · 60 FPS</option>
-              <option value="1080p30">1080p · 30 FPS</option>
-              <option value="1080p60">1080p · 60 FPS</option>
-              <option value="1440p30">1440p · 30 FPS</option>
-            </select>
-          </label>
         </div>
+        <label class="field">
+          <span>Empfangspuffer</span>
+          <select class="input" bind:value={settings.audioBuffer} onchange={() => changed('output')}>
+            <option value={0}>Automatisch – geringste Verzögerung</option>
+            <option value={80}>Stabil – +80 ms, weniger Aussetzer</option>
+            <option value={160}>Sehr stabil – +160 ms, für wackelige Verbindungen</option>
+          </select>
+        </label>
+        <p class="hint">Wenn Freunde bei dir abgehackt klingen, obwohl ihr Mikro gut ist, stell hier „Stabil“ ein.</p>
         <label class="check">
           <input type="checkbox" bind:checked={settings.echoCancellation} onchange={() => changed('device')} />
           <span>Echounterdrückung (bei Lautsprechern an lassen)</span>
@@ -318,16 +350,77 @@
             {/each}
           </select>
         </label>
+      {:else if current === 'appearance'}
+        <AppearanceSettings />
+      {:else if current === 'streams'}
+        <h1>Streams</h1>
+        <h2 class="first">Zuschauen</h2>
+        <label class="check">
+          <input type="checkbox" bind:checked={settings.autoWatch} onchange={() => saveSettings()} />
+          <span>Streams automatisch öffnen, sobald jemand im Anruf live geht</span>
+        </label>
+        <p class="hint">Aus (empfohlen): Streams erscheinen als Kachel mit „Stream ansehen“. Solange du nicht zuschaust, schickt dir niemand das Bild – das spart Bandbreite für alle.</p>
+        <label class="field">
+          <span>Standard-Qualität für mich</span>
+          <select class="input" bind:value={settings.viewerQuality} onchange={() => saveSettings()}>
+            {#each QUALITY_ORDER as q (q)}<option value={q}>{VIEW_QUALITIES[q].label}</option>{/each}
+          </select>
+        </label>
+        <p class="hint">Der Streamer rechnet das Bild für dich passend herunter. Nützlich bei langsamem Internet oder kleinem Fenster. Pro Stream änderst du das per Rechtsklick → „Qualität für mich“.</p>
+        <h2>Eigene Übertragung</h2>
+        <div class="grid2">
+          <label class="field">
+            <span>Qualität</span>
+            <select class="input" bind:value={settings.screenQuality} onchange={() => saveSettings()}>
+              <option value="720p60">720p · 60 FPS</option>
+              <option value="1080p30">1080p · 30 FPS</option>
+              <option value="1080p60">1080p · 60 FPS</option>
+              <option value="1440p30">1440p · 30 FPS</option>
+            </select>
+          </label>
+        </div>
+        <p class="hint">Die Auflösung ist ein Pixel-Budget: Hochkant-, 4:3- oder Ultrawide-Monitore werden in ihrem Format übertragen, nicht in 16:9 gequetscht.</p>
+        <label class="check">
+          <input type="checkbox" bind:checked={settings.streamAudio} onchange={() => saveSettings()} />
+          <span>Ton mitübertragen (Windows; Linux mit PipeWire)</span>
+        </label>
+        <p class="hint">Dein eigener Anruf-Ton wird dabei herausgefiltert, damit deine Freunde sich nicht selbst hören.</p>
       {:else if current === 'notify'}
-        <h1>Benachrichtigungen</h1>
+        <h1>Benachrichtigungen & Töne</h1>
         <label class="check">
           <input type="checkbox" bind:checked={settings.notifications} onchange={() => saveSettings()} />
           <span>Desktop-Benachrichtigungen für neue Nachrichten</span>
         </label>
         <label class="check">
           <input type="checkbox" bind:checked={settings.sounds} onchange={() => saveSettings()} />
-          <span>Töne (Nachrichten, Beitreten/Verlassen, Stummschalten)</span>
+          <span>Töne abspielen</span>
         </label>
+        {#if settings.sounds}
+          <label class="field">
+            <span>Lautstärke der Töne · {Math.round(settings.soundVolume * 100)} %</span>
+            <input type="range" min="0.05" max="1" step="0.05" bind:value={settings.soundVolume} onchange={() => { saveSettings(); playSound('peer-join') }} />
+          </label>
+          <h2>Klang</h2>
+          <div class="grid3">
+            {#each [['classic', 'Klassisch', 'Klare Glöckchen'], ['soft', 'Sanft', 'Rund und leise, wie ein Xylophon'], ['retro', 'Retro', '8-Bit-Pieptöne']] as [id, name, desc] (id)}
+              <button class="option" class:active={settings.soundPack === id} onclick={() => { settings.soundPack = id as any; saveSettings(); playSound('join', true) }}>
+                <div><strong>{name}</strong><span>{desc}</span></div>
+              </button>
+            {/each}
+          </div>
+          <h2>Wann</h2>
+          <div class="events">
+            {#each SOUND_EVENTS as ev (ev.id)}
+              <div class="event">
+                <label class="check">
+                  <input type="checkbox" checked={soundEnabled(ev.id)} onchange={(e) => { settings.soundEvents[ev.id] = (e.target as HTMLInputElement).checked; saveSettings() }} />
+                  <span>{ev.label}</span>
+                </label>
+                <button class="icon-btn" title="Anhören" onclick={() => playSound(ev.id === 'ptt' ? 'ptt-on' : ev.id, true)}><Icon name="play" size={14} /></button>
+              </div>
+            {/each}
+          </div>
+        {/if}
       {:else if current === 'network'}
         <h1>Netzwerk</h1>
         <p class="hint">Nachrichten, Dateien und die Anruf-Aushandlung laufen komplett P2P über Hyperswarm (DHT + Holepunching). Für Anrufe fragt WebRTC zusätzlich einen STUN-Server nach der eigenen öffentlichen Adresse – das ist eine reine Adressabfrage, es fließen keine Inhalte darüber.</p>
@@ -410,6 +503,16 @@
     color: var(--text-faint);
     padding: 4px 10px;
   }
+  .version.link {
+    text-align: left;
+    color: var(--link);
+  }
+  .version.link:hover {
+    text-decoration: underline;
+  }
+  .version.err {
+    color: var(--red);
+  }
   main {
     flex: 1 1 800px;
     overflow-y: auto;
@@ -422,6 +525,11 @@
     font-size: 20px;
     color: var(--text-strong);
     margin: 0 0 20px;
+  }
+  h2.first {
+    border-top: 0;
+    padding-top: 0;
+    margin-top: 0;
   }
   h2 {
     font-size: 12px;
@@ -438,6 +546,24 @@
     gap: 12px;
     margin-bottom: 12px;
   }
+  .grid3 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+  }
+  .events {
+    display: flex;
+    flex-direction: column;
+  }
+  .event {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .event .check {
+    margin: 6px 0;
+  }
   .profile {
     display: flex;
     gap: 20px;
@@ -449,6 +575,9 @@
   }
   .profile-fields {
     flex: 1;
+  }
+  .profile-fields > .label {
+    margin-bottom: 12px;
   }
   .card {
     background: var(--bg-sidebar);
@@ -581,7 +710,7 @@
     background: var(--bg-active);
   }
   .option.active :global(svg) {
-    color: #a5acff;
+    color: var(--accent-text);
   }
   .check {
     display: flex;

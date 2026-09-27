@@ -4,11 +4,22 @@
 // intercepted by a man in the middle. No signaling server is involved.
 import { call as rpc, on } from '../rpc'
 import { ui, toast, errorText, KIND_DM, type Voice } from '../state.svelte'
-import { settings, iceServers } from '../settings.svelte'
+import { settings, saveSettings, iceServers } from '../settings.svelte'
 import { Mic, dbfs, playSound, createSuppressor } from './audio'
 import { tuneOpus } from './sdp'
 
 type Kind = 'mic' | 'cam' | 'screen'
+export type ViewQuality = 'source' | '1080' | '720' | '480' | '360'
+
+// Short side of the picture a viewer asks for; the streamer scales down per viewer
+export const QUALITY_ORDER: ViewQuality[] = ['source', '1080', '720', '480', '360']
+export const VIEW_QUALITIES: Record<ViewQuality, { label: string; short: number }> = {
+  source: { label: 'Original', short: 0 },
+  '1080': { label: '1080p', short: 1080 },
+  '720': { label: '720p', short: 720 },
+  '480': { label: '480p', short: 480 },
+  '360': { label: '360p (Datensparmodus)', short: 360 }
+}
 
 export interface RemoteMedia {
   cam: MediaStream | null
@@ -28,6 +39,12 @@ export const voice = $state({
   focus: null as string | null, // tile id shown large
   micLevel: -100,
   noiseActive: 'off' as string,
+  // Streams are opt-in: a remote screen is only sent to us while we watch it
+  watching: {} as Record<string, boolean>,
+  quality: {} as Record<string, ViewQuality>,
+  viewers: {} as Record<string, boolean>, // who watches our own stream
+  screenHasAudio: false,
+  screenAudioOn: true,
   incoming: null as { space: string; channel: string; from: string } | null
 })
 
@@ -90,9 +107,13 @@ class Link {
   streams = new Map<string, MediaStream>()
   audio: HTMLAudioElement
   screenAudio: HTMLAudioElement
+  screenSource: MediaStream | null = null
+  remoteView = { screen: false, quality: 'source' as ViewQuality }
   analyser: AnalyserNode | null = null
   source: MediaStreamAudioSourceNode | null = null
   restartTimer: ReturnType<typeof setTimeout> | null = null
+  receivers = new Set<RTCRtpReceiver>()
+  lostSignalled = false
   queue: Promise<void> = Promise.resolve()
 
   constructor (id: string) {
@@ -116,6 +137,7 @@ class Link {
     this.pc.onconnectionstatechange = () => this.onState()
 
     this.sendKinds()
+    this.sendView()
     if (mic.stream) this.addStream('mic', mic.stream)
     if (voice.camera) this.addStream('cam', voice.camera)
     if (voice.screen) this.addStream('screen', voice.screen)
@@ -132,6 +154,11 @@ class Link {
     if (voice.camera) kinds[voice.camera.id] = 'cam'
     if (voice.screen) kinds[voice.screen.id] = 'screen'
     this.send({ kinds })
+  }
+
+  // Tells this peer whether we watch its stream and in which quality
+  sendView () {
+    this.send({ view: { screen: !!voice.watching[this.id], quality: voice.quality[this.id] || settings.viewerQuality } })
   }
 
   addStream (kind: Kind, stream: MediaStream) {
@@ -161,9 +188,22 @@ class Link {
           const p = sender.getParameters()
           if (!p.encodings || !p.encodings.length) continue
           const audio = sender.track?.kind === 'audio'
-          p.encodings[0].maxBitrate = audio ? (kind === 'screen' ? 128_000 : limits.mic) : limits[kind]
-          p.encodings[0].priority = kind === 'mic' ? 'high' : 'medium'
-          p.encodings[0].networkPriority = kind === 'mic' ? 'high' : 'medium'
+          const enc = p.encodings[0]
+          enc.maxBitrate = audio ? (kind === 'screen' ? 160_000 : limits.mic) : limits[kind]
+          enc.priority = kind === 'mic' ? 'high' : 'medium'
+          enc.networkPriority = kind === 'mic' ? 'high' : 'medium'
+          if (kind === 'screen') {
+            // nothing goes out to peers that do not watch; the others get the size they asked for
+            enc.active = this.remoteView.screen
+            if (!audio) {
+              const st = sender.track?.getSettings() || {}
+              const short = Math.min(st.width || 1080, st.height || 1080)
+              const want = VIEW_QUALITIES[this.remoteView.quality]?.short || 0
+              const scale = want && short > want ? short / want : 1
+              enc.scaleResolutionDownBy = scale
+              enc.maxBitrate = Math.max(600_000, Math.round(limits.screen / (scale * scale)))
+            }
+          }
           if (!audio) (p as any).degradationPreference = kind === 'screen' && !settings.screenQuality.includes('60') ? 'maintain-resolution' : 'balanced'
           await sender.setParameters(p)
         } catch {}
@@ -198,6 +238,16 @@ class Link {
         this.classify()
         return
       }
+      if (data.view && typeof data.view === 'object') {
+        const q = data.view.quality in VIEW_QUALITIES ? (data.view.quality as ViewQuality) : 'source'
+        const watching = !!data.view.screen
+        if (watching && !this.remoteView.screen && voice.screen) playSound('viewer')
+        this.remoteView = { screen: watching, quality: q }
+        if (watching) voice.viewers[this.id] = true
+        else delete voice.viewers[this.id]
+        await this.tuneSenders()
+        return
+      }
       if (data.description) {
         const desc = data.description as RTCSessionDescriptionInit
         const collision = desc.type === 'offer' && (this.makingOffer || this.pc.signalingState !== 'stable')
@@ -226,6 +276,8 @@ class Link {
   }
 
   onTrack (e: RTCTrackEvent) {
+    if (e.track.kind === 'audio') this.receivers.add(e.receiver)
+    this.applyBuffer()
     const stream = e.streams[0] || new MediaStream([e.track])
     this.streams.set(stream.id, stream)
     e.track.onunmute = () => this.classify()
@@ -250,12 +302,19 @@ class Link {
       else if (kind === 'screen') {
         screen = stream
         const audio = stream.getAudioTracks()
-        if (audio.length && this.screenAudio.srcObject !== stream) this.screenAudio.srcObject = new MediaStream(audio)
+        if (audio.length && this.screenSource !== stream) {
+          this.screenSource = stream
+          this.screenAudio.srcObject = new MediaStream(audio)
+          this.screenAudio.play().catch(() => {})
+        }
       }
     }
     r.cam = cam && cam.getVideoTracks().length ? cam : null
     r.screen = screen && screen.getVideoTracks().length ? screen : null
-    if (!r.screen) this.screenAudio.srcObject = null
+    if (!r.screen) {
+      this.screenSource = null
+      this.screenAudio.srcObject = null
+    }
   }
 
   attachMic (stream: MediaStream) {
@@ -272,11 +331,24 @@ class Link {
     } catch {}
   }
 
+  // A larger minimum jitter buffer trades a little latency for fewer dropouts on shaky connections
+  applyBuffer () {
+    const target = settings.audioBuffer > 0 ? settings.audioBuffer : null
+    for (const r of this.receivers) {
+      try {
+        if ((r as any).jitterBufferTarget !== target) (r as any).jitterBufferTarget = target
+      } catch {}
+    }
+  }
+
   applyOutput () {
-    const vol = settings.volumes[this.id] ?? 1
+    this.applyBuffer()
+    const clamp = (v: number) => Math.max(0, Math.min(1, v))
+    this.audio.muted = voice.deaf || !!settings.localMutes[this.id]
+    this.audio.volume = clamp(settings.volumes[this.id] ?? 1)
+    this.screenAudio.muted = voice.deaf || !voice.watching[this.id] || !!settings.streamMutes[this.id]
+    this.screenAudio.volume = clamp(settings.streamVolumes[this.id] ?? 1)
     for (const el of [this.audio, this.screenAudio]) {
-      el.muted = voice.deaf
-      el.volume = Math.max(0, Math.min(1, vol))
       const sink = settings.outputDevice === 'default' ? '' : settings.outputDevice
       if ((el as any).sinkId !== sink) (el as any).setSinkId?.(sink).catch(() => {})
     }
@@ -290,6 +362,11 @@ class Link {
       this.restartTimer = null
       this.tuneSenders()
     }
+    if (state === 'failed' && !this.lostSignalled) {
+      this.lostSignalled = true
+      playSound('disconnect')
+    }
+    if (state === 'connected') this.lostSignalled = false
     if ((state === 'failed' || state === 'disconnected') && !this.restartTimer) {
       this.restartTimer = setTimeout(() => {
         this.restartTimer = null
@@ -307,6 +384,7 @@ class Link {
     this.screenAudio.srcObject = null
     delete voice.remote[this.id]
     delete voice.speaking[this.id]
+    delete voice.viewers[this.id]
     if (voice.focus && voice.focus.startsWith(this.id)) voice.focus = null
   }
 }
@@ -335,6 +413,7 @@ export async function joinVoice (space: string, channel: string) {
   reconcile()
   playSound('join')
   levelTimer = setInterval(updateLevels, 60)
+  startCallingTone()
   if (!micListening) {
     micListening = true
     window.addEventListener('keydown', onKey)
@@ -353,21 +432,48 @@ export async function leaveVoice (switching = false) {
   stopScreen(false)
   if (levelTimer) clearInterval(levelTimer)
   levelTimer = null
+  stopCallingTone()
   await mic.stop()
   voice.speaking = {}
   voice.focus = null
+  voice.watching = {}
+  voice.viewers = {}
   if (!switching) publish()
   playSound('leave')
 }
 
+// Calling a friend: a soft ringback tone until they pick up (at most a minute)
+let callingTimer: ReturnType<typeof setInterval> | null = null
+function startCallingTone () {
+  stopCallingTone()
+  const started = Date.now()
+  const waiting = () => {
+    const a = voice.active
+    if (!a || ui.spaces[a.space]?.kind !== KIND_DM) return false
+    return participants(a.space, a.channel).length < 2 && Date.now() - started < 60_000
+  }
+  if (!waiting()) return
+  playSound('calling')
+  callingTimer = setInterval(() => {
+    if (waiting()) playSound('calling')
+    else stopCallingTone()
+  }, 3000)
+}
+
+function stopCallingTone () {
+  if (callingTimer) clearInterval(callingTimer)
+  callingTimer = null
+}
+
 export function toggleMute () {
-  if (voice.deaf && voice.muted) {
+  const wasDeaf = voice.deaf && voice.muted
+  if (wasDeaf) {
     voice.deaf = false
     applyOutputs()
   }
   voice.muted = !voice.muted
   mic.setMuted(voice.muted)
-  playSound(voice.muted ? 'mute' : 'unmute')
+  playSound(wasDeaf ? 'undeafen' : voice.muted ? 'mute' : 'unmute')
   publish()
 }
 
@@ -376,7 +482,7 @@ export function toggleDeaf () {
   voice.muted = voice.deaf
   mic.setMuted(voice.muted)
   applyOutputs()
-  playSound(voice.deaf ? 'mute' : 'unmute')
+  playSound(voice.deaf ? 'deafen' : 'undeafen')
   publish()
 }
 
@@ -387,6 +493,54 @@ export function applyOutputs () {
 export function setVolume (identity: string, volume: number) {
   settings.volumes[identity] = volume
   links.get(identity)?.applyOutput()
+}
+
+export function toggleLocalMute (identity: string) {
+  if (settings.localMutes[identity]) delete settings.localMutes[identity]
+  else settings.localMutes[identity] = true
+  saveSettings()
+  links.get(identity)?.applyOutput()
+}
+
+// ---- watching other people's streams ----
+
+export function isStreaming (identity: string) {
+  return identity === ui.me ? !!voice.screen : !!voice.remote[identity]?.screen || !!ui.peers[identity]?.voice?.screen
+}
+
+export function watchStream (identity: string, on: boolean) {
+  if (identity === ui.me) return
+  if (on) voice.watching[identity] = true
+  else {
+    delete voice.watching[identity]
+    if (voice.focus === identity + ':screen') voice.focus = null
+  }
+  const link = links.get(identity)
+  link?.sendView()
+  link?.applyOutput()
+}
+
+export function setStreamQuality (identity: string, quality: ViewQuality) {
+  voice.quality[identity] = quality
+  links.get(identity)?.sendView()
+}
+
+export function setStreamVolume (identity: string, volume: number) {
+  settings.streamVolumes[identity] = volume
+  links.get(identity)?.applyOutput()
+}
+
+export function toggleStreamMute (identity: string) {
+  if (settings.streamMutes[identity]) delete settings.streamMutes[identity]
+  else settings.streamMutes[identity] = true
+  saveSettings()
+  links.get(identity)?.applyOutput()
+}
+
+// Sender side: pause the sound of our own stream without stopping the picture
+export function toggleStreamAudio () {
+  voice.screenAudioOn = !voice.screenAudioOn
+  for (const t of voice.screen?.getAudioTracks() || []) t.enabled = voice.screenAudioOn
 }
 
 function renegotiateAll (kind: Kind, stream: MediaStream | null) {
@@ -440,41 +594,115 @@ export function stopCamera (announce = true) {
   if (announce) publish()
 }
 
-const SCREEN_PRESETS: Record<string, { width: number; height: number; frameRate: number }> = {
-  '720p60': { width: 1280, height: 720, frameRate: 60 },
-  '1080p30': { width: 1920, height: 1080, frameRate: 30 },
-  '1080p60': { width: 1920, height: 1080, frameRate: 60 },
-  '1440p30': { width: 2560, height: 1440, frameRate: 30 }
+// long side x short side: the budget is a pixel count, so portrait, 4:3 or
+// ultrawide screens keep their shape and are not squeezed into a 16:9 box
+const SCREEN_PRESETS: Record<string, { long: number; short: number; frameRate: number }> = {
+  '720p60': { long: 1280, short: 720, frameRate: 60 },
+  '1080p30': { long: 1920, short: 1080, frameRate: 30 },
+  '1080p60': { long: 1920, short: 1080, frameRate: 60 },
+  '1440p30': { long: 2560, short: 1440, frameRate: 30 }
+}
+
+export interface ScreenOptions {
+  audio: boolean
+  app?: string | null // Linux: only this application's sound (null = everything but P2Pcord)
+}
+
+let screenAudioLinked = false
+
+// Linux: system audio comes from venmic's virtual microphone
+async function linuxStreamAudio (app: string | null): Promise<MediaStreamTrack | null> {
+  if (!(await window.p2p.streamAudio.available())) return null
+  if (!(await window.p2p.streamAudio.start(app))) return null
+  screenAudioLinked = true
+  let device: MediaDeviceInfo | undefined
+  for (let i = 0; i < 10 && !device; i++) {
+    const list = await navigator.mediaDevices.enumerateDevices()
+    device = list.find((d) => d.kind === 'audioinput' && d.label.includes('vencord-screen-share'))
+    if (!device) await new Promise((resolve) => setTimeout(resolve, 150))
+  }
+  if (!device) return null
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      deviceId: { exact: device.deviceId },
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+      channelCount: 2,
+      sampleRate: 48000
+    }
+  })
+  await window.p2p.streamAudio.unmute()
+  return stream.getAudioTracks()[0] || null
 }
 
 // Called after the user picked a source in the picker (or directly on Wayland,
 // where the system portal shows its own picker).
-export async function startScreen (sourceId: string | null) {
+export async function startScreen (sourceId: string | null, opts: ScreenOptions = { audio: settings.streamAudio }) {
   if (!voice.active) return
   const preset = SCREEN_PRESETS[settings.screenQuality] || SCREEN_PRESETS['1080p30']
+  const platform = window.p2p.info().platform
   try {
     await window.p2p.selectScreen(sourceId)
     const stream = await navigator.mediaDevices.getDisplayMedia({
-      video: { width: { max: preset.width }, height: { max: preset.height }, frameRate: { ideal: preset.frameRate, max: preset.frameRate } },
-      audio: window.p2p.info().platform === 'win32' // system audio capture is Windows-only
+      video: { width: { max: preset.long }, height: { max: preset.long }, frameRate: { ideal: preset.frameRate, max: preset.frameRate } },
+      // Windows: system loopback, without our own call audio where Chromium supports that
+      audio: opts.audio && platform === 'win32' ? ({ restrictOwnAudio: true, suppressLocalAudioPlayback: false } as any) : false
     })
     const track = stream.getVideoTracks()[0]
     track.contentHint = preset.frameRate >= 60 ? 'motion' : 'detail'
     track.onended = () => stopScreen()
-    voice.screen = stream
-    renegotiateAll('screen', stream)
-    publish()
+    await fitPixels(track, preset.long * preset.short)
+    if (opts.audio && platform === 'linux') {
+      try {
+        const audio = await linuxStreamAudio(opts.app ?? null)
+        if (audio) stream.addTrack(audio)
+        else toast('Stream-Ton ist auf diesem System nicht verfügbar (PipeWire nötig).')
+      } catch (err) {
+        toast('Stream-Ton konnte nicht gestartet werden: ' + errorText(err), 'error')
+      }
+    }
+    beginScreen(stream)
   } catch (err) {
+    if (screenAudioLinked) window.p2p.streamAudio.stop()
+    screenAudioLinked = false
     if ((err as Error)?.name !== 'NotAllowedError') toast('Bildschirmübertragung fehlgeschlagen: ' + errorText(err), 'error')
   }
+}
+
+function beginScreen (stream: MediaStream) {
+  voice.screenHasAudio = stream.getAudioTracks().length > 0
+  voice.screenAudioOn = true
+  voice.screen = stream
+  voice.viewers = {}
+  renegotiateAll('screen', stream)
+  publish()
+  playSound('stream-start')
+}
+
+// Scale a capture down to a pixel budget while keeping its aspect ratio
+async function fitPixels (track: MediaStreamTrack, budget: number) {
+  const { width, height } = track.getSettings()
+  if (!width || !height || width * height <= budget * 1.02) return
+  const f = Math.sqrt(budget / (width * height))
+  try {
+    await track.applyConstraints({ width: { max: Math.round(width * f) }, height: { max: Math.round(height * f) }, frameRate: track.getConstraints().frameRate })
+  } catch {}
 }
 
 export function stopScreen (announce = true) {
   if (!voice.screen) return
   voice.screen.getTracks().forEach((t) => t.stop())
   voice.screen = null
+  voice.screenHasAudio = false
+  voice.viewers = {}
+  if (screenAudioLinked) window.p2p.streamAudio.stop()
+  screenAudioLinked = false
   renegotiateAll('screen', null)
-  if (announce) publish()
+  if (announce) {
+    publish()
+    playSound('stream-stop')
+  }
 }
 
 // Rebuild the mic chain after settings changed during a call
@@ -501,12 +729,15 @@ function onKey (e: KeyboardEvent) {
   if (settings.inputMode !== 'ptt' || e.code !== settings.pttKey) return
   const target = e.target as HTMLElement | null
   if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return
-  mic.pttDown = e.type === 'keydown'
+  const down = e.type === 'keydown'
+  if (down !== mic.pttDown && voice.active && !voice.muted) playSound(down ? 'ptt-on' : 'ptt-off')
+  mic.pttDown = down
 }
 
 // ---- backend events ----
 
 let prevParticipants = new Set<string>()
+let prevLive = new Set<string>()
 const declined = new Set<string>() // `${from}:${space}` for the current call attempt
 let ringTimer: ReturnType<typeof setInterval> | null = null
 
@@ -558,16 +789,33 @@ export function initVoice () {
   $effect.root(() => {
     $effect(checkIncoming)
   })
-  on('peers', () => {
+  on('peers', (peers) => {
+    // this listener may run before the one in state.svelte.ts: never reconcile against stale presence
+    ui.peers = peers
     reconcile()
     if (!voice.active) {
       prevParticipants = new Set()
+      prevLive = new Set()
       return
     }
     const now = new Set(participants(voice.active.space, voice.active.channel))
-    for (const id of now) if (!prevParticipants.has(id) && id !== ui.me && prevParticipants.size) playSound('join')
-    for (const id of prevParticipants) if (!now.has(id) && id !== ui.me) playSound('leave')
+    for (const id of now) if (!prevParticipants.has(id) && id !== ui.me && prevParticipants.size) playSound('peer-join')
+    for (const id of prevParticipants) if (!now.has(id) && id !== ui.me) playSound('peer-leave')
     prevParticipants = now
+
+    // someone in our call went live or stopped
+    const live = new Set([...now].filter((id) => id !== ui.me && ui.peers[id]?.voice?.screen))
+    for (const id of live) {
+      if (prevLive.has(id)) continue
+      playSound('stream-start')
+      if (settings.autoWatch) watchStream(id, true)
+    }
+    for (const id of prevLive) {
+      if (live.has(id)) continue
+      if (now.has(id)) playSound('stream-stop')
+      watchStream(id, false)
+    }
+    prevLive = live
   })
   on('signal', ({ from, space, data }) => {
     if (!voice.active || voice.active.space !== space || !data || data.channel !== voice.active.channel) return
@@ -581,4 +829,4 @@ export function initVoice () {
 }
 
 // Debug handle for automated tests (dev builds started with P2PCORD_DEBUG_PORT only)
-if (window.p2p.info().debug) (window as any).__p2pVoice = { links, voice, mic, createSuppressor, ui }
+if (window.p2p.info().debug) (window as any).__p2pVoice = { links, voice, mic, createSuppressor, ui, settings, beginScreen, watchStream, setStreamQuality }
