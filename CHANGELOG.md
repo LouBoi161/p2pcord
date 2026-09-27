@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.3.0
 
 - **Android app**: the full P2P app on the phone (the same backend in a Bare Kit worklet, the same UI in a
   WebView), one screen at a time like Discord mobile, back button, notifications for new messages, a call
