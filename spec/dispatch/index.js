@@ -24,8 +24,10 @@ class Router {
     this._handler13 = null
     this._handler14 = null
     this._handler15 = null
+    this._handler16 = null
+    this._handler17 = null
 
-    this._missing = 16
+    this._missing = 18
   }
 
   add (name, handler) {
@@ -78,6 +80,12 @@ class Router {
       case '@p2pcord/add-migrant':
         this._handler15 = handler
         break
+      case '@p2pcord/add-reaction':
+        this._handler16 = handler
+        break
+      case '@p2pcord/remove-reaction':
+        this._handler17 = handler
+        break
       default:
         throw DispatchError.NONEXISTENT_ROUTE(name)
     }
@@ -101,6 +109,8 @@ class Router {
     assert(this._handler13 !== null, 'Missing handler for "@p2pcord/set-successor"')
     assert(this._handler14 !== null, 'Missing handler for "@p2pcord/add-rekey"')
     assert(this._handler15 !== null, 'Missing handler for "@p2pcord/add-migrant"')
+    assert(this._handler16 !== null, 'Missing handler for "@p2pcord/add-reaction"')
+    assert(this._handler17 !== null, 'Missing handler for "@p2pcord/remove-reaction"')
   }
 
   async dispatch (message, context) {
@@ -145,6 +155,10 @@ class Router {
         return this._handler14(op.value, context)
       case 15:
         return this._handler15(op.value, context)
+      case 16:
+        return this._handler16(op.value, context)
+      case 17:
+        return this._handler17(op.value, context)
       default:
         throw DispatchError.HANDLER_NOT_FOUND_BY_ID(op.id)
     }
@@ -274,6 +288,18 @@ const route15 = {
   enc: getEncoding('@p2pcord/migrant')
 }
 
+const route16 = {
+  name: '@p2pcord/add-reaction',
+  id: 16,
+  enc: getEncoding('@p2pcord/reaction-ref')
+}
+
+const route17 = {
+  name: '@p2pcord/remove-reaction',
+  id: 17,
+  enc: getEncoding('@p2pcord/reaction-ref')
+}
+
 function getRouteByName (name) {
   switch (name) {
     case '@p2pcord/set-info':
@@ -308,6 +334,10 @@ function getRouteByName (name) {
       return route14
     case '@p2pcord/add-migrant':
       return route15
+    case '@p2pcord/add-reaction':
+      return route16
+    case '@p2pcord/remove-reaction':
+      return route17
     default:
       throw DispatchError.ROUTE_NOT_FOUND_BY_NAME(name)
   }
@@ -347,6 +377,10 @@ function getRouteById (id) {
       return route14
     case 15:
       return route15
+    case 16:
+      return route16
+    case 17:
+      return route17
     default:
       throw DispatchError.HANDLER_NOT_FOUND_BY_ID(id)
   }

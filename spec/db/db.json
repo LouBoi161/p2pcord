@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "offset": 0,
   "schema": [
     {
@@ -120,6 +120,39 @@
       "derived": false,
       "key": [
         "identity"
+      ],
+      "trigger": null
+    },
+    {
+      "name": "reactions",
+      "namespace": "p2pcord",
+      "id": 8,
+      "type": 1,
+      "version": 3,
+      "versionField": null,
+      "indexes": [],
+      "schema": "@p2pcord/reaction",
+      "derived": false,
+      "key": [
+        "channel",
+        "message",
+        "emoji",
+        "identity"
+      ],
+      "trigger": null
+    },
+    {
+      "name": "activity",
+      "namespace": "p2pcord",
+      "id": 9,
+      "type": 1,
+      "version": 3,
+      "versionField": null,
+      "indexes": [],
+      "schema": "@p2pcord/activity",
+      "derived": false,
+      "key": [
+        "channel"
       ],
       "trigger": null
     }

@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "offset": 0,
   "schema": [
     {
@@ -97,6 +97,18 @@
       "name": "@p2pcord/add-migrant",
       "requestType": "@p2pcord/migrant",
       "version": 2
+    },
+    {
+      "id": 16,
+      "name": "@p2pcord/add-reaction",
+      "requestType": "@p2pcord/reaction-ref",
+      "version": 3
+    },
+    {
+      "id": 17,
+      "name": "@p2pcord/remove-reaction",
+      "requestType": "@p2pcord/reaction-ref",
+      "version": 3
     }
   ]
 }

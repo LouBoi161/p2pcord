@@ -163,6 +163,36 @@ schema.register({
   ]
 })
 
+// One person's reaction to a message (identity = identity key, not the device)
+schema.register({
+  name: 'reaction',
+  fields: [
+    { name: 'channel', type: 'string', required: true },
+    { name: 'message', type: 'string', required: true },
+    { name: 'emoji', type: 'string', required: true },
+    { name: 'identity', type: 'buffer', required: true }
+  ]
+})
+
+schema.register({
+  name: 'reaction-ref',
+  fields: [
+    { name: 'channel', type: 'string', required: true },
+    { name: 'message', type: 'string', required: true },
+    { name: 'emoji', type: 'string', required: true }
+  ]
+})
+
+// Counts every change to a channel's messages (new, edited, deleted, reacted),
+// so the UI knows when to reload even if no newer message arrived
+schema.register({
+  name: 'activity',
+  fields: [
+    { name: 'channel', type: 'string', required: true },
+    { name: 'rev', type: 'uint', required: true }
+  ]
+})
+
 Hyperschema.toDisk(hyperSchema)
 
 const hyperdb = HyperdbBuilder.from(SCHEMA_DIR, DB_DIR)
@@ -175,6 +205,8 @@ db.collections.register({ name: 'messages', schema: '@p2pcord/message', key: ['c
 db.collections.register({ name: 'successor', schema: '@p2pcord/successor', key: ['id'] })
 db.collections.register({ name: 'rekeys', schema: '@p2pcord/rekey', key: ['to'] })
 db.collections.register({ name: 'migrants', schema: '@p2pcord/migrant', key: ['identity'] })
+db.collections.register({ name: 'reactions', schema: '@p2pcord/reaction', key: ['channel', 'message', 'emoji', 'identity'] })
+db.collections.register({ name: 'activity', schema: '@p2pcord/activity', key: ['channel'] })
 HyperdbBuilder.toDisk(hyperdb)
 
 const hyperdispatch = Hyperdispatch.from(SCHEMA_DIR, DISPATCH_DIR, { offset: 0 })
@@ -196,4 +228,6 @@ dispatch.register({ name: 'remove-message', requestType: '@p2pcord/message-ref' 
 dispatch.register({ name: 'set-successor', requestType: '@p2pcord/successor' })
 dispatch.register({ name: 'add-rekey', requestType: '@p2pcord/rekey' })
 dispatch.register({ name: 'add-migrant', requestType: '@p2pcord/migrant' })
+dispatch.register({ name: 'add-reaction', requestType: '@p2pcord/reaction-ref' })
+dispatch.register({ name: 'remove-reaction', requestType: '@p2pcord/reaction-ref' })
 Hyperdispatch.toDisk(hyperdispatch)

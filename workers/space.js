@@ -25,6 +25,8 @@ const CHANNEL_VOICE = 1
 const MAX_TEXT = 4000
 const MAX_NAME = 32
 const MAX_FILES = 10
+const MAX_EMOJI = 32 // chars: one emoji incl. modifiers and ZWJ sequences
+const MAX_REACTIONS = 20 // distinct emojis per message
 const JOIN_TIMEOUT = 10 * 60 * 1000
 
 const JoinRequest = {
@@ -404,6 +406,7 @@ class Space extends ReadyResource {
       if (await view.get('@p2pcord/messages', { channel: msg.channel, id: msg.id })) return
       const files = (msg.files || []).slice(0, MAX_FILES)
       if (!msg.text && files.length === 0) return
+      await touch(view, msg.channel)
       await view.insert('@p2pcord/messages', {
         channel: msg.channel,
         id: msg.id,
@@ -421,6 +424,7 @@ class Space extends ReadyResource {
       const msg = await view.get('@p2pcord/messages', { channel: edit.channel, id: edit.id })
       if (!author || !msg || !b4a.equals(author.identity, msg.author)) return
       await view.insert('@p2pcord/messages', { ...msg, text: clip(edit.text, MAX_TEXT), edited: edit.ts })
+      await touch(view, edit.channel)
     })
 
     r.add('@p2pcord/set-successor', async (succ, { view, from }) => {
@@ -451,6 +455,31 @@ class Space extends ReadyResource {
       if (!author || !msg) return
       if (!b4a.equals(author.identity, msg.author) && author.role < ROLE_ADMIN) return
       await view.delete('@p2pcord/messages', ref)
+      const reactions = await view.find('@p2pcord/reactions', reactionRange(ref.channel, ref.id)).toArray()
+      for (const x of reactions) await view.delete('@p2pcord/reactions', x)
+      await touch(view, ref.channel)
+    })
+
+    r.add('@p2pcord/add-reaction', async (ref, { view, from }) => {
+      const author = await view.get('@p2pcord/members', { writer: from })
+      if (!author || !ref.emoji || ref.emoji.length > MAX_EMOJI) return
+      if (!(await view.get('@p2pcord/messages', { channel: ref.channel, id: ref.message }))) return
+      const key = { channel: ref.channel, message: ref.message, emoji: ref.emoji, identity: author.identity }
+      if (await view.get('@p2pcord/reactions', key)) return
+      const existing = await view.find('@p2pcord/reactions', reactionRange(ref.channel, ref.message)).toArray()
+      const emojis = new Set(existing.map((x) => x.emoji))
+      if (!emojis.has(ref.emoji) && emojis.size >= MAX_REACTIONS) return
+      await view.insert('@p2pcord/reactions', key)
+      await touch(view, ref.channel)
+    })
+
+    r.add('@p2pcord/remove-reaction', async (ref, { view, from }) => {
+      const author = await view.get('@p2pcord/members', { writer: from })
+      if (!author) return
+      const key = { channel: ref.channel, message: ref.message, emoji: ref.emoji, identity: author.identity }
+      if (!(await view.get('@p2pcord/reactions', key))) return
+      await view.delete('@p2pcord/reactions', key)
+      await touch(view, ref.channel)
     })
   }
 
@@ -523,7 +552,8 @@ class Space extends ReadyResource {
     for (const ch of channels) {
       if (ch.kind !== CHANNEL_TEXT) continue
       const last = await this.view.findOne('@p2pcord/messages', { gte: { channel: ch.id }, lte: { channel: ch.id } }, { reverse: true, limit: 1 })
-      latest[ch.id] = last ? { ts: last.ts, author: b4a.toString(last.author, 'hex') } : null
+      const act = await this.view.get('@p2pcord/activity', { channel: ch.id })
+      latest[ch.id] = last ? { ts: last.ts, author: b4a.toString(last.author, 'hex'), rev: act ? act.rev : 0 } : null
     }
 
     return {
@@ -544,8 +574,22 @@ class Space extends ReadyResource {
   async listMessages (channel, { before = null, limit = 50 } = {}) {
     const range = { gte: { channel } }
     range[before ? 'lt' : 'lte'] = before ? { channel, id: before } : { channel }
-    const rows = await this.view.find('@p2pcord/messages', range, { reverse: true, limit }).toArray()
-    return rows.reverse().map(toMessage)
+    const rows = (await this.view.find('@p2pcord/messages', range, { reverse: true, limit }).toArray()).reverse()
+    if (!rows.length) return []
+    // One range scan covers the reactions of every message in this page
+    const reactions = await this.view.find('@p2pcord/reactions', {
+      gte: { channel, message: rows[0].id },
+      lte: { channel, message: rows[rows.length - 1].id }
+    }).toArray()
+    const byMessage = new Map()
+    for (const x of reactions) {
+      let groups = byMessage.get(x.message)
+      if (!groups) byMessage.set(x.message, (groups = new Map()))
+      let who = groups.get(x.emoji)
+      if (!who) groups.set(x.emoji, (who = []))
+      who.push(b4a.toString(x.identity, 'hex'))
+    }
+    return rows.map((m) => toMessage(m, byMessage.get(m.id)))
   }
 
   // ---- mutations ----
@@ -571,6 +615,10 @@ class Space extends ReadyResource {
 
   deleteMessage (channel, id) {
     return this._append('@p2pcord/remove-message', { channel, id })
+  }
+
+  react (channel, message, emoji, on) {
+    return this._append(on ? '@p2pcord/add-reaction' : '@p2pcord/remove-reaction', { channel, message, emoji })
   }
 
   addChannel (name, kind) {
@@ -705,7 +753,7 @@ class Space extends ReadyResource {
   }
 }
 
-function toMessage (m) {
+function toMessage (m, reactions) {
   return {
     channel: m.channel,
     id: m.id,
@@ -714,8 +762,18 @@ function toMessage (m) {
     ts: m.ts,
     files: (m.files || []).map(fileToJSON),
     replyTo: m.replyTo || null,
-    edited: m.edited || 0
+    edited: m.edited || 0,
+    reactions: reactions ? [...reactions].map(([emoji, who]) => ({ emoji, who })) : []
   }
+}
+
+function reactionRange (channel, message) {
+  return { gte: { channel, message }, lte: { channel, message } }
+}
+
+async function touch (view, channel) {
+  const act = await view.get('@p2pcord/activity', { channel })
+  await view.insert('@p2pcord/activity', { channel, rev: (act ? act.rev : 0) + 1 })
 }
 
 function fileToJSON (f) {

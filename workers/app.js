@@ -541,14 +541,32 @@ class App extends ReadyResource {
     return this._space(id).deleteMessage(channel, message)
   }
 
-  async uploadFile ({ id, path: file, name, mime }) {
+  react ({ id, channel, message, emoji, on }) {
+    return this._space(id).react(channel, message, String(emoji), !!on)
+  }
+
+  // `upload` is the UI's handle for this upload: progress is reported as
+  // 'upload' events, since copying a large file into the space takes a while
+  async uploadFile ({ id, path: file, name, mime, upload = null }) {
     const space = this._space(id)
     const st = await fs.promises.stat(file)
     if (!st.isFile()) throw new Error('NOT_A_FILE')
     if (st.size > MAX_FILE) throw new Error('FILE_TOO_LARGE')
     return space.putFile(async (blobs) => {
+      const rs = fs.createReadStream(file)
+      if (upload !== null) {
+        let done = 0
+        let last = 0
+        rs.on('data', (chunk) => {
+          done += chunk.length
+          const now = Date.now()
+          if (now - last < 200) return
+          last = now
+          this.send('upload', { upload, done, total: st.size })
+        })
+      }
       const ws = blobs.createWriteStream()
-      await pipelinePromise(fs.createReadStream(file), ws)
+      await pipelinePromise(rs, ws)
       return ws.id
     }, { name: name || path.basename(file), mime })
   }

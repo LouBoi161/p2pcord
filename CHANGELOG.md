@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Reactions** on messages: quick 👍 ❤️ 😂 in the hover bar, a picker with 48 emojis, *React* in the right-click
+  menu (long press on phones); click a reaction to join or take it back, hover to see who reacted
+- Fix: deleted and edited messages stayed on screen until the chat was reopened – every change to a channel
+  now refreshes it
+- Sending large files shows how far the file has been prepared (it is encrypted and stored on your device
+  before the message goes out; nothing is uploaded to a server)
+
 ## v0.3.0
 
 - **Android app**: the full P2P app on the phone (the same backend in a Bare Kit worklet, the same UI in a

@@ -4,7 +4,7 @@
 const { IndexEncoder, c, b4a } = require('hyperdb/runtime')
 const { version, getEncoding, setVersion } = require('./messages.js')
 
-const versions = { schema: version, db: 2 }
+const versions = { schema: version, db: 3 }
 
 // '@p2pcord/info' collection key
 const collection0_key = new IndexEncoder([
@@ -554,6 +554,166 @@ const collection7 = {
   decodedVersion: 0
 }
 
+// '@p2pcord/reactions' collection key
+const collection8_key = new IndexEncoder([
+  IndexEncoder.STRING,
+  IndexEncoder.STRING,
+  IndexEncoder.STRING,
+  IndexEncoder.BUFFER
+], { prefix: 8 })
+
+function collection8_indexify (record) {
+  const arr = []
+
+  const a0 = record.channel
+  if (a0 === undefined) return arr
+  arr.push(a0)
+
+  const a1 = record.message
+  if (a1 === undefined) return arr
+  arr.push(a1)
+
+  const a2 = record.emoji
+  if (a2 === undefined) return arr
+  arr.push(a2)
+
+  const a3 = record.identity
+  if (a3 === undefined) return arr
+  arr.push(a3)
+
+  return arr
+}
+
+// '@p2pcord/reactions' value encoding
+const collection8_enc = getEncoding('@p2pcord/reaction/hyperdb#8')
+
+// '@p2pcord/reactions' reconstruction function
+function collection8_reconstruct (schemaVersion, keyBuf, valueBuf) {
+  const key = collection8_key.decode(keyBuf)
+  setVersion(schemaVersion)
+  const state = { start: 0, end: valueBuf.byteLength, buffer: valueBuf }
+  const type = c.uint.decode(state)
+  if (type !== 0) throw new Error('Unknown collection type: ' + type)
+  collection8.decodedVersion = c.uint.decode(state)
+  const record = collection8_enc.decode(state)
+  record.channel = key[0]
+  record.message = key[1]
+  record.emoji = key[2]
+  record.identity = key[3]
+  return record
+}
+// '@p2pcord/reactions' key reconstruction function
+function collection8_reconstruct_key (keyBuf) {
+  const key = collection8_key.decode(keyBuf)
+  return {
+    channel: key[0],
+    message: key[1],
+    emoji: key[2],
+    identity: key[3]
+  }
+}
+
+// '@p2pcord/reactions'
+const collection8 = {
+  name: '@p2pcord/reactions',
+  id: 8,
+  version: 3,
+  encodeKey (record) {
+    const key = [record.channel, record.message, record.emoji, record.identity]
+    return collection8_key.encode(key)
+  },
+  encodeKeyRange ({ gt, lt, gte, lte } = {}) {
+    return collection8_key.encodeRange({
+      gt: gt ? collection8_indexify(gt) : null,
+      lt: lt ? collection8_indexify(lt) : null,
+      gte: gte ? collection8_indexify(gte) : null,
+      lte: lte ? collection8_indexify(lte) : null
+    })
+  },
+  encodeValue (schemaVersion, collectionVersion, record) {
+    setVersion(schemaVersion)
+    const state = { start: 0, end: 2, buffer: null }
+    collection8_enc.preencode(state, record)
+    state.buffer = b4a.allocUnsafe(state.end)
+    state.buffer[state.start++] = 0
+    state.buffer[state.start++] = collectionVersion
+    collection8_enc.encode(state, record)
+    return state.buffer
+  },
+  trigger: null,
+  reconstruct: collection8_reconstruct,
+  reconstructKey: collection8_reconstruct_key,
+  indexes: [],
+  decodedVersion: 0
+}
+
+// '@p2pcord/activity' collection key
+const collection9_key = new IndexEncoder([
+  IndexEncoder.STRING
+], { prefix: 9 })
+
+function collection9_indexify (record) {
+  const a = record.channel
+  return a === undefined ? [] : [a]
+}
+
+// '@p2pcord/activity' value encoding
+const collection9_enc = getEncoding('@p2pcord/activity/hyperdb#9')
+
+// '@p2pcord/activity' reconstruction function
+function collection9_reconstruct (schemaVersion, keyBuf, valueBuf) {
+  const key = collection9_key.decode(keyBuf)
+  setVersion(schemaVersion)
+  const state = { start: 0, end: valueBuf.byteLength, buffer: valueBuf }
+  const type = c.uint.decode(state)
+  if (type !== 0) throw new Error('Unknown collection type: ' + type)
+  collection9.decodedVersion = c.uint.decode(state)
+  const record = collection9_enc.decode(state)
+  record.channel = key[0]
+  return record
+}
+// '@p2pcord/activity' key reconstruction function
+function collection9_reconstruct_key (keyBuf) {
+  const key = collection9_key.decode(keyBuf)
+  return {
+    channel: key[0]
+  }
+}
+
+// '@p2pcord/activity'
+const collection9 = {
+  name: '@p2pcord/activity',
+  id: 9,
+  version: 3,
+  encodeKey (record) {
+    const key = [record.channel]
+    return collection9_key.encode(key)
+  },
+  encodeKeyRange ({ gt, lt, gte, lte } = {}) {
+    return collection9_key.encodeRange({
+      gt: gt ? collection9_indexify(gt) : null,
+      lt: lt ? collection9_indexify(lt) : null,
+      gte: gte ? collection9_indexify(gte) : null,
+      lte: lte ? collection9_indexify(lte) : null
+    })
+  },
+  encodeValue (schemaVersion, collectionVersion, record) {
+    setVersion(schemaVersion)
+    const state = { start: 0, end: 2, buffer: null }
+    collection9_enc.preencode(state, record)
+    state.buffer = b4a.allocUnsafe(state.end)
+    state.buffer[state.start++] = 0
+    state.buffer[state.start++] = collectionVersion
+    collection9_enc.encode(state, record)
+    return state.buffer
+  },
+  trigger: null,
+  reconstruct: collection9_reconstruct,
+  reconstructKey: collection9_reconstruct_key,
+  indexes: [],
+  decodedVersion: 0
+}
+
 const collections = [
   collection0,
   collection1,
@@ -562,7 +722,9 @@ const collections = [
   collection4,
   collection5,
   collection6,
-  collection7
+  collection7,
+  collection8,
+  collection9
 ]
 
 const indexes = [
@@ -580,6 +742,8 @@ function resolveCollection (name) {
     case '@p2pcord/successor': return collection5
     case '@p2pcord/rekeys': return collection6
     case '@p2pcord/migrants': return collection7
+    case '@p2pcord/reactions': return collection8
+    case '@p2pcord/activity': return collection9
     default: return null
   }
 }

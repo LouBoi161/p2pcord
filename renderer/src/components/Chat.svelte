@@ -3,7 +3,7 @@
   import Icon from './Icon.svelte'
   import Avatar from './Avatar.svelte'
   import Attachment from './Attachment.svelte'
-  import { call, bridge } from '../lib/rpc'
+  import { call, on, bridge } from '../lib/rpc'
   import {
     ui,
     messagesFor,
@@ -39,7 +39,7 @@
   let scroller: HTMLDivElement | undefined = $state()
   let input: HTMLTextAreaElement | undefined = $state()
   let text = $state('')
-  let pending = $state<{ id: number; name: string; ref: FileRef | null; error?: string }[]>([])
+  let pending = $state<{ id: number; name: string; ref: FileRef | null; progress: number; error?: string }[]>([])
   let replyTo = $state<Message | null>(null)
   let editing = $state<string | null>(null)
   let editText = $state('')
@@ -47,6 +47,7 @@
   let stick = true
   let lastKey = ''
   let sending = $state(false)
+  let picker = $state<{ m: Message; x: number; y: number } | null>(null)
 
   // Keep the view pinned to the newest message unless the user scrolled up
   $effect(() => {
@@ -105,17 +106,24 @@
 
   // ---- sending ----
 
-  let nextUpload = 1
+  // Upload handles are shared by every open chat (main window and pop-outs), so
+  // they must not collide across component instances
+  let nextUpload = Math.floor(Math.random() * 1e9)
+
+  $effect(() => on('upload', ({ upload, done, total }: { upload: number; done: number; total: number }) => {
+    const p = pending.find((x) => x.id === upload)
+    if (p && !p.ref) p.progress = total ? done / total : 0
+  }))
 
   async function upload (file: File) {
     if (!ui.chat) return
     const id = nextUpload++
-    pending.push({ id, name: file.name || 'Bild.png', ref: null })
+    pending.push({ id, name: file.name || 'Bild.png', ref: null, progress: 0 })
     try {
       const path = bridge.pathForFile(file)
       let ref: FileRef
       if (path) {
-        ref = await call('uploadFile', { id: ui.chat.space, path, name: file.name, mime: file.type || guessMime(file.name) })
+        ref = await call('uploadFile', { id: ui.chat.space, path, name: file.name, mime: file.type || guessMime(file.name), upload: id })
       } else {
         const buf = new Uint8Array(await file.arrayBuffer())
         let bin = ''
@@ -144,7 +152,7 @@
   async function send () {
     if (!ui.chat || sending) return
     if (pending.some((p) => !p.ref)) {
-      toast('Warte, bis alle Dateien hochgeladen sind.')
+      toast('Warte, bis alle Dateien vorbereitet sind.')
       return
     }
     const body = text.trim()
@@ -204,6 +212,43 @@
     el.multiple = true
     el.onchange = () => [...(el.files || [])].forEach(upload)
     el.click()
+  }
+
+  // ---- reactions ----
+
+  const QUICK = ['👍', '❤️', '😂', '😮', '😢', '🔥']
+  const EMOJIS = [
+    '👍', '👎', '❤️', '😂', '🤣', '😮', '😢', '😭', '😡', '🔥', '🎉', '💯',
+    '😀', '😁', '😅', '😊', '😍', '🥰', '😘', '😎', '🤔', '🙄', '😬', '😴',
+    '🤯', '🥲', '😇', '🤡', '💀', '👀', '🙏', '👏', '🙌', '💪', '🤝', '👋',
+    '✅', '❌', '⭐', '✨', '💔', '💩', '🍺', '🍕', '🎮', '🏆', '🚀', '🤷'
+  ]
+
+  function mine (r: { who: string[] }) {
+    return r.who.includes(ui.me)
+  }
+
+  function toggleReaction (m: Message, emoji: string) {
+    if (!ui.chat) return
+    const on = !m.reactions.some((r) => r.emoji === emoji && mine(r))
+    call('react', { id: ui.chat.space, channel: m.channel, message: m.id, emoji, on }).catch((err) => toast(errorText(err), 'error'))
+  }
+
+  function reactionTitle (r: { emoji: string; who: string[] }) {
+    return r.who.map((id) => (id === ui.me ? 'Du' : memberName(space, id))).join(', ') + ' – ' + r.emoji
+  }
+
+  function openPicker (e: MouseEvent, m: Message) {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    // 300 x 240 is the picker's size; keep it on screen
+    const x = Math.max(8, Math.min(rect.right - 300, window.innerWidth - 308))
+    const y = rect.bottom + 246 > window.innerHeight ? Math.max(8, rect.top - 246) : rect.bottom + 6
+    picker = { m, x, y }
+  }
+
+  function pick (emoji: string) {
+    if (picker) toggleReaction(picker.m, emoji)
+    picker = null
   }
 
   // ---- editing ----
@@ -274,6 +319,7 @@
       link && { label: 'Link öffnen', icon: 'external-link', action: () => (ui.dialog = { type: 'link', url: link.dataset.href }) },
       (selected || link) && { type: 'sep' },
       { label: 'Antworten', icon: 'reply', action: () => { replyTo = m; input?.focus() } },
+      current(m) && { type: 'sub', label: 'Reagieren', icon: 'smile-plus', items: QUICK.map((emoji) => ({ label: emoji, action: () => toggleReaction(m, emoji), checked: m.reactions.some((r) => r.emoji === emoji && mine(r)) })) },
       editable && { label: 'Bearbeiten', icon: 'edit', action: () => startEdit(m) },
       m.text && { label: 'Text kopieren', icon: 'copy', action: () => copy(m.text) },
       m.text && { label: 'Zitieren', icon: 'chat', action: () => quote(m) },
@@ -411,8 +457,26 @@
             {#each m.files as f (f.core + f.blockOffset)}
               <Attachment space={space.id} base={m.base} file={f} />
             {/each}
+            {#if m.reactions.length}
+              <div class="reactions">
+                {#each m.reactions as r (r.emoji)}
+                  <button class="reaction" class:mine={mine(r)} title={reactionTitle(r)} disabled={!current(m)} onclick={() => toggleReaction(m, r.emoji)}>
+                    <span class="remoji">{r.emoji}</span><span class="rcount">{r.who.length}</span>
+                  </button>
+                {/each}
+                {#if current(m)}
+                  <button class="reaction add" title="Reaktion hinzufügen" onclick={(e) => openPicker(e, m)}><Icon name="smile-plus" size={16} /></button>
+                {/if}
+              </div>
+            {/if}
           </div>
           <div class="actions">
+            {#if current(m)}
+              {#each QUICK.slice(0, 3) as emoji}
+                <button title="Mit {emoji} reagieren" class="quick" onclick={() => toggleReaction(m, emoji)}>{emoji}</button>
+              {/each}
+              <button title="Reaktion hinzufügen" onclick={(e) => openPicker(e, m)}><Icon name="smile-plus" size={18} /></button>
+            {/if}
             <button title="Antworten" onclick={() => { replyTo = m; input?.focus() }}><Icon name="reply" size={18} /></button>
             {#if m.author === ui.me && m.text && current(m)}
               <button title="Bearbeiten" onclick={() => startEdit(m)}><Icon name="edit" size={18} /></button>
@@ -425,6 +489,15 @@
       {/each}
       <div class="bottom-pad"></div>
     </div>
+
+    {#if picker}
+      <div class="picker-backdrop" role="presentation" onclick={() => (picker = null)} oncontextmenu={(e) => { e.preventDefault(); picker = null }}></div>
+      <div class="picker" style="left:{picker.x}px;top:{picker.y}px" role="dialog" aria-label="Emoji auswählen">
+        {#each EMOJIS as emoji}
+          <button class:mine={picker.m.reactions.some((r) => r.emoji === emoji && mine(r))} onclick={() => pick(emoji)}>{emoji}</button>
+        {/each}
+      </div>
+    {/if}
 
     <div class="composer">
       {#if replyTo}
@@ -440,6 +513,10 @@
             <div class="upload">
               {#if p.ref}<Icon name="check" size={16} />{:else}<span class="spinner"></span>{/if}
               <span class="uname">{p.name}</span>
+              {#if !p.ref && p.progress > 0}
+                <span class="upct" title="Wird für den Versand vorbereitet (verschlüsselt und bei dir gespeichert)">{Math.floor(p.progress * 100)} %</span>
+                <span class="ubar" style="width:{p.progress * 100}%"></span>
+              {/if}
               <button onclick={() => (pending = pending.filter((x) => x.id !== p.id))} title="Entfernen"><Icon name="x" size={14} /></button>
             </div>
           {/each}
@@ -471,6 +548,8 @@
     </div>
   {/if}
 </section>
+
+<svelte:window onkeydown={(e) => { if (picker && e.key === 'Escape') picker = null }} />
 
 <style>
   .chat {
@@ -714,6 +793,87 @@
   .actions .danger:hover {
     color: var(--red-text);
   }
+  .actions .quick {
+    font-size: 16px;
+  }
+  .reactions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+  }
+  .reaction {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 26px;
+    padding: 0 7px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: var(--bg-control);
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  .reaction:hover:not(:disabled) {
+    border-color: var(--border-soft);
+    background: var(--bg-control-hover);
+  }
+  .reaction.mine {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    color: var(--accent-text);
+  }
+  .reaction:disabled {
+    cursor: default;
+  }
+  .reaction.add {
+    display: none;
+    color: var(--text-muted);
+  }
+  .msg:hover .reaction.add {
+    display: inline-flex;
+  }
+  .remoji {
+    font-size: 16px;
+    line-height: 1;
+  }
+  .rcount {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .picker-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+  }
+  .picker {
+    position: fixed;
+    z-index: 51;
+    width: 300px;
+    max-height: 240px;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    align-content: start;
+    gap: 2px;
+    padding: 8px;
+    background: var(--bg-float);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .picker button {
+    height: 34px;
+    border-radius: 6px;
+    font-size: 20px;
+    line-height: 1;
+  }
+  .picker button:hover {
+    background: var(--bg-hover);
+  }
+  .picker button.mine {
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+  }
   .edit {
     width: 100%;
     min-height: 44px;
@@ -823,6 +983,8 @@
     border-radius: 0;
   }
   .upload {
+    position: relative;
+    overflow: hidden;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -834,6 +996,19 @@
   }
   .upload :global(svg) {
     color: var(--green);
+  }
+  .upct {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .ubar {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 2px;
+    background: var(--accent);
+    transition: width 0.2s linear;
   }
   .uname {
     overflow: hidden;

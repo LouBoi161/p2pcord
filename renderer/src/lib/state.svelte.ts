@@ -28,7 +28,13 @@ export interface Message {
   files: FileRef[]
   replyTo: string | null
   edited: number
+  reactions: Reaction[]
   base?: string // which (possibly rotated-away) base the message lives in
+}
+
+export interface Reaction {
+  emoji: string
+  who: string[] // identity keys, hex
 }
 
 export interface Channel {
@@ -36,7 +42,7 @@ export interface Channel {
   name: string
   kind: number
   position: number
-  latest: { ts: number; author: string } | null
+  latest: { ts: number; author: string; rev: number } | null
 }
 
 export interface Member {
@@ -322,13 +328,14 @@ function onSpace (state: Space) {
   }
 
   for (const ch of state.channels) {
-    if (ch.kind !== TEXT || !ch.latest) continue
-    const before = prev?.channels.find((c) => c.id === ch.id)?.latest?.ts || 0
-    if (ch.latest.ts <= before) continue
+    if (ch.kind !== TEXT) continue
+    const was = prev?.channels.find((c) => c.id === ch.id)?.latest || null
+    // rev also moves on edits, deletions and reactions, which leave ts alone
+    if (was?.ts === ch.latest?.ts && was?.rev === ch.latest?.rev) continue
     const key = chatKey(state.id, ch.id)
     const open = ui.chat && ui.chat.space === state.id && ui.chat.channel === ch.id
     if (ui.messages[key] || open) loadMessages(state.id, ch.id)
-    if (prev && ch.latest.author !== ui.me && (!open || !focused())) notify(state, ch)
+    if (prev && ch.latest && ch.latest.ts > (was?.ts || 0) && ch.latest.author !== ui.me && (!open || !focused())) notify(state, ch)
   }
 
   if (ui.chat && ui.chat.space === state.id && !state.channels.some((c) => c.id === ui.chat!.channel)) {

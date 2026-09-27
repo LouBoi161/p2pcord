@@ -28,6 +28,7 @@ const METHODS = new Set([
   'sendMessage',
   'editMessage',
   'deleteMessage',
+  'react',
   'uploadFile',
   'uploadBytes',
   'fetchFile',

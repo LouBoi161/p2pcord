@@ -156,3 +156,66 @@ test('files: put on one peer, read on another', async (t) => {
   const got = await b.readFile(msg.files[0])
   t.alike(got, data)
 })
+
+test('reactions: toggle, per person, cleared with the message; rev tracks every change', async (t) => {
+  const testnet = await createTestnet(3, { teardown: t.teardown })
+  const alice = await createPeer(t, testnet, 'Alice')
+  const bob = await createPeer(t, testnet, 'Bob')
+
+  const a = alice.open({ create: { name: 'Gruppe', kind: Space.KIND_GROUP } })
+  await a.ready()
+  const text = (await a.getState()).channels.find((c) => c.kind === Space.CHANNEL_TEXT)
+  const b = bob.open({ invite: await a.createInvite() })
+  await b.ready()
+
+  const rev = async (s) => (await s.getState()).channels.find((c) => c.id === text.id).latest.rev
+  const aliceHex = b4a.toString(alice.identity.publicKey, 'hex')
+  const bobHex = b4a.toString(bob.identity.publicKey, 'hex')
+
+  const first = await a.sendMessage(text.id, 'erste')
+  const second = await a.sendMessage(text.id, 'zweite')
+  const r0 = await rev(a)
+
+  await a.react(text.id, first, '👍', true)
+  await a.react(text.id, first, '👍', true) // twice counts once
+  await until(async () => {
+    await b.base.update()
+    return (await b.listMessages(text.id)).length === 2
+  })
+  await b.react(text.id, first, '👍', true)
+  await b.react(text.id, first, '🔥', true)
+
+  const reacted = await until(async () => {
+    await a.base.update()
+    const m = (await a.listMessages(text.id)).find((x) => x.id === first)
+    return m.reactions.length === 2 && m.reactions.find((r) => r.emoji === '👍').who.length === 2 ? m : null
+  })
+  t.alike(reacted.reactions.find((r) => r.emoji === '👍').who.sort(), [aliceHex, bobHex].sort())
+  t.alike(reacted.reactions.find((r) => r.emoji === '🔥').who, [bobHex])
+  t.ok((await rev(a)) > r0, 'reactions bump rev although no new message arrived')
+
+  // Bob can only take back his own reaction
+  await b.react(text.id, first, '👍', false)
+  await until(async () => {
+    await a.base.update()
+    const m = (await a.listMessages(text.id)).find((x) => x.id === first)
+    return m.reactions.find((r) => r.emoji === '👍').who.length === 1
+  })
+  t.alike((await a.listMessages(text.id)).find((x) => x.id === first).reactions.find((r) => r.emoji === '👍').who, [aliceHex])
+
+  // Oversized or empty emoji strings and reactions to unknown messages are ignored
+  await a.react(text.id, first, 'x'.repeat(100), true)
+  await a.react(text.id, 'gibt-es-nicht', '👍', true)
+  t.is((await a.listMessages(text.id)).find((x) => x.id === first).reactions.length, 2)
+
+  // Editing and deleting bump rev too; deleting also drops the reactions
+  const r1 = await rev(a)
+  await a.editMessage(text.id, second, 'zweite, bearbeitet')
+  const r2 = await rev(a)
+  t.ok(r2 > r1, 'edit bumps rev')
+  await a.deleteMessage(text.id, first)
+  t.ok((await rev(a)) > r2, 'delete bumps rev')
+  const left = await a.listMessages(text.id)
+  t.alike(left.map((m) => m.text), ['zweite, bearbeitet'])
+  t.is((await a.view.find('@p2pcord/reactions', {}).toArray()).length, 0, 'reactions of the deleted message are gone')
+})
