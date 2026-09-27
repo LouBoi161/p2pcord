@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.1
+
+- Remove friends from the DM list or the chat header, including entries still waiting for the friend code to be redeemed
+- Camera falls back to the default device when the saved one is gone; clearer camera error messages
+- Microphone sensitivity is set directly on the level meter of the mic test
+- Screen sharing on Wayland asks the portal only once per session
+- License notice for the Lucide/Feather icons, disclaimer regarding Discord/TeamSpeak
+
 ## v0.1.0 – first public release
 
 - Groups with text and voice channels, roles, invites (blind pairing)
