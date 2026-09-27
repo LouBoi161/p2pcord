@@ -33,11 +33,13 @@ const METHODS = new Set([
   'uploadBytes',
   'fetchFile',
   'setVoice',
-  'signal'
+  'signal',
+  'relayInfo'
 ])
 
 // Bridged guests (iPhones) never get uploadFile: it reads a path on this machine
-const GUEST_METHODS = new Set([...METHODS].filter((m) => m !== 'uploadFile'))
+// nor relayInfo: its TURN server listens on this machine's loopback only
+const GUEST_METHODS = new Set([...METHODS].filter((m) => m !== 'uploadFile' && m !== 'relayInfo'))
 
 const HOST_METHODS = new Set(['guestOpen', 'guestRpc', 'guestClose', 'guestDrop', 'guestFile'])
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.5.0
+
+- **Calls connect without a direct path**: when WebRTC cannot get through (both on mobile data, strict routers
+  – the endless *Connecting…*), media goes through the P2P connection the two apps already share. Every app
+  runs a small TURN relay on 127.0.0.1 for this; no server, media stays end-to-end encrypted. A link icon on
+  the tile shows when a call uses this path. Both sides need v0.5.0
+- Android: while an invite code is open, the app stays reachable in the background (notification *Waiting for
+  your friend…*, ends when someone joined or after 10 minutes) – before, Android froze the app while the code
+  was being sent through a messenger and the friend hung at *Joining…*
+- Joining that takes longer than 20 s explains that the inviter needs P2Pcord open
+
 ## v0.4.0
 
 - **Reactions** on messages: quick 👍 ❤️ 😂 in the hover bar, a picker with 48 emojis, *React* in the right-click

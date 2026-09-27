@@ -2,6 +2,9 @@
 // the Noise-authenticated Hyperswarm connection, so the DTLS fingerprints are
 // bound to the peers' identities: media is end-to-end encrypted and cannot be
 // intercepted by a man in the middle. No signaling server is involved.
+// Where no direct path exists (carrier-grade NAT on both sides), media goes
+// through the backend's local TURN relay and on over that same Hyperswarm
+// connection (see workers/relay.js) – still no server.
 import { call as rpc, on, bridge } from '../rpc'
 import { ui, toast, errorText, KIND_DM, type Voice } from '../state.svelte'
 import { settings, saveSettings, iceServers } from '../settings.svelte'
@@ -25,6 +28,7 @@ export interface RemoteMedia {
   cam: MediaStream | null
   screen: MediaStream | null
   state: RTCPeerConnectionState | 'new'
+  route: 'direct' | 'relay' | null // how media flows once connected
 }
 
 export const voice = $state({
@@ -55,6 +59,30 @@ mic.onchange = () => {
 }
 
 const links = new Map<string, Link>()
+
+// The backend's local TURN server; null where it is unavailable (iPhone web app)
+let relay: RTCIceServer | null = null
+let relayLoaded: Promise<void> | null = null
+
+function loadRelay () {
+  relayLoaded ??= rpc<RTCIceServer | null>('relayInfo')
+    .then((r) => { relay = r })
+    .catch(() => {})
+  return relayLoaded
+}
+
+function callIceServers (): RTCIceServer[] {
+  return relay ? [...iceServers(), relay] : iceServers()
+}
+
+// Testing aid: localStorage 'p2pcord:forceRelay' = '1' allows only the relay path
+function forceRelay () {
+  try {
+    return localStorage.getItem('p2pcord:forceRelay') === '1'
+  } catch {
+    return false
+  }
+}
 let levelTimer: ReturnType<typeof setInterval> | null = null
 let analysisCtx: AudioContext | null = null
 
@@ -120,7 +148,7 @@ class Link {
     this.id = id
     this.polite = ui.me > id
     links.set(id, this)
-    voice.remote[id] = { cam: null, screen: null, state: 'new' }
+    voice.remote[id] = { cam: null, screen: null, state: 'new', route: null }
 
     this.audio = new Audio()
     this.audio.autoplay = true
@@ -128,7 +156,12 @@ class Link {
     this.screenAudio.autoplay = true
     this.applyOutput()
 
-    this.pc = new RTCPeerConnection({ iceServers: iceServers(), bundlePolicy: 'max-bundle', rtcpMuxPolicy: 'require' })
+    this.pc = new RTCPeerConnection({
+      iceServers: callIceServers(),
+      iceTransportPolicy: forceRelay() ? 'relay' : 'all',
+      bundlePolicy: 'max-bundle',
+      rtcpMuxPolicy: 'require'
+    })
     this.pc.onnegotiationneeded = () => this.negotiate()
     this.pc.onicecandidate = ({ candidate }) => {
       if (candidate) this.send({ candidate: candidate.toJSON() })
@@ -361,6 +394,9 @@ class Link {
       if (this.restartTimer) clearTimeout(this.restartTimer)
       this.restartTimer = null
       this.tuneSenders()
+      this.detectRoute()
+      // ICE may still move to a better pair shortly after connecting
+      setTimeout(() => this.detectRoute(), 5000)
     }
     if (state === 'failed' && !this.lostSignalled) {
       this.lostSignalled = true
@@ -373,6 +409,20 @@ class Link {
         if (this.pc.connectionState === 'failed' || this.pc.connectionState === 'disconnected') this.pc.restartIce()
       }, state === 'failed' ? 0 : 4000)
     }
+  }
+
+  async detectRoute () {
+    try {
+      const stats = await this.pc.getStats()
+      let pairId: string | undefined
+      stats.forEach((s: any) => {
+        if (s.type === 'transport' && s.selectedCandidatePairId) pairId = s.selectedCandidatePairId
+      })
+      const pair: any = pairId ? stats.get(pairId) : null
+      const local: any = pair ? stats.get(pair.localCandidateId) : null
+      const r = voice.remote[this.id]
+      if (r && local) r.route = local.candidateType === 'relay' ? 'relay' : 'direct'
+    } catch {}
   }
 
   close () {
@@ -397,6 +447,7 @@ export async function joinVoice (space: string, channel: string) {
   if (voice.active && voice.active.space === space && voice.active.channel === channel) return
   if (voice.active) await leaveVoice(true)
   voice.joining = true
+  await loadRelay()
   try {
     await mic.start()
     mic.setMuted(voice.muted)

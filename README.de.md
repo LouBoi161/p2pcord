@@ -193,6 +193,9 @@ Freundes als **Brücke**:
 - Nachrichten an Offline-Leute brauchen mindestens ein Mitglied, das online ist.
 - Für Anrufe fragt WebRTC einen öffentlichen **STUN**-Server nach deiner Adresse (nur Adresse, keine Inhalte);
   änderbar unter ⚙ → *Netzwerk*, optional mit eigenem TURN-Server.
+- Findet WebRTC keinen direkten Weg (z. B. beide im Mobilfunk), läuft der Anruf über eure bestehende
+  P2P-Verbindung: jede App hat dafür einen eigenen kleinen TURN-Relay, der nur auf `127.0.0.1` lauscht.
+  Kein fremder Server, die Medien bleiben Ende-zu-Ende verschlüsselt (DTLS-SRTP).
 - Alle 6 Stunden fragt die App die **GitHub-API** nach dem neuesten Release (GitHub sieht dabei deine IP-Adresse).
   Mit `--no-updates` gestartet, lässt sie das.
 - Der Code wurde **nicht unabhängig geprüft** (kein Audit).

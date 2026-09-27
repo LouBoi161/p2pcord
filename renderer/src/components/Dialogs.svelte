@@ -11,6 +11,7 @@
     errorText,
     createGroup,
     createDmInvite,
+    awaitJoin,
     join,
     leave,
     isOnline,
@@ -91,6 +92,7 @@
         maxUses: +inviteUses,
         expiresIn: days ? days * 86400000 : 0
       })
+      awaitJoin(space)
     } catch (err) {
       toast(errorText(err), 'error')
     } finally {

@@ -222,6 +222,9 @@
       {#if !screen}
         {#if v?.deaf}<Icon name="headphones-off" size={14} />{:else if v?.muted}<Icon name="mic-off" size={14} />{:else if settings.localMutes[tile.id]}<Icon name="volume-x" size={14} />{/if}
       {/if}
+      {#if !own && !screen && voice.remote[tile.id]?.route === 'relay' && connState(tile.id) === 'connected'}
+        <span class="route" title="Kein direkter Weg möglich (z. B. beide im Mobilfunk): der Anruf läuft über eure P2P-Verbindung – weiterhin verschlüsselt, ohne Server"><Icon name="link" size={13} /></span>
+      {/if}
       {#if screen && own}
         <span class="viewers" title="Zuschauer"><Icon name="eye" size={13} /> {viewers}</span>
       {/if}
@@ -441,6 +444,10 @@
     align-items: center;
     gap: 3px;
     color: #ddd;
+  }
+  .route {
+    display: inline-flex;
+    opacity: 0.75;
   }
   .conn {
     position: absolute;

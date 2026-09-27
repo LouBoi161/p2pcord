@@ -108,6 +108,9 @@ export function androidBridge (native: any): Bridge {
     setCallActive: (active) => {
       req('call', !!active).catch(() => {})
     },
+    keepAwake: (ms) => {
+      req('awake', Math.max(0, Math.round(ms))).catch(() => {})
+    },
     onBack: (fn) => {
       backs.push(fn)
       return () => {

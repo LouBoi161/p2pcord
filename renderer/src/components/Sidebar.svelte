@@ -149,7 +149,7 @@
       {#each ui.joining as code (code)}
         <div class="joining">
           <span class="spinner"></span>
-          <span class="name">Trete bei…</span>
+          <span class="name" title={ui.slowJoins[code] ? 'Dauert es länger? Wer den Code erstellt hat, muss P2Pcord geöffnet haben.' : ''}>{ui.slowJoins[code] ? 'Warte auf Einladenden…' : 'Trete bei…'}</span>
           <button class="icon-btn" title="Abbrechen" onclick={() => cancelJoin(code)}><Icon name="x" size={16} /></button>
         </div>
       {/each}

@@ -48,6 +48,8 @@ export interface Bridge {
   notify: ((title: string, body: string) => void) | null
   // Mobile: keeps the app alive in the background while a call runs
   setCallActive(active: boolean): void
+  // Mobile: keeps the app reachable in the background for ms (an open invite); 0 ends it
+  keepAwake(ms: number): void
   // Android back button: return true when the UI handled it
   onBack(listener: () => boolean): () => void
 }

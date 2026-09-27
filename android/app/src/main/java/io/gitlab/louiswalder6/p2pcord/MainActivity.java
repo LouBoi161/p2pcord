@@ -254,6 +254,10 @@ public final class MainActivity extends Activity implements Backend.Listener {
           setCallActive(args.optBoolean(0));
           respond(id, null);
           break;
+        case "awake":
+          keepAwake(args.optLong(0));
+          respond(id, null);
+          break;
         case "exit":
           moveTaskToBack(true);
           respond(id, null);
@@ -314,6 +318,13 @@ public final class MainActivity extends Activity implements Backend.Listener {
     } else {
       stopService(i);
     }
+  }
+
+  // ms > 0: stay reachable that long (an open invite); 0: no longer needed
+  private void keepAwake(long ms) {
+    Intent i = new Intent(this, InviteService.class);
+    if (ms > 0) startForegroundService(i.putExtra(InviteService.EXTRA_MS, ms));
+    else stopService(i);
   }
 
   private void notify(String title, String body) {

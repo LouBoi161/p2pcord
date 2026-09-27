@@ -1,7 +1,7 @@
 {
   "name": "p2pcord",
   "productName": "P2Pcord",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Serverloser, Ende-zu-Ende-verschlüsselter Voice- und Text-Chat für Freunde (P2P, Holepunch-Stack)",
   "license": "Apache-2.0",
   "author": "louiswalder6",
@@ -35,15 +35,25 @@
     "path": {
       "bare": "bare-path",
       "default": "path"
+    },
+    "net": {
+      "bare": "bare-tcp",
+      "default": "net"
+    },
+    "crypto": {
+      "bare": "bare-crypto",
+      "default": "crypto"
     }
   },
   "dependencies": {
     "autobase": "^7.28.2",
     "b4a": "^1.9.0",
+    "bare-crypto": "^1.15.3",
     "bare-events": "^2.9.2",
     "bare-fs": "^4.8.2",
     "bare-path": "^3.1.2",
     "bare-storage": "^1.1.0",
+    "bare-tcp": "^2.6.1",
     "blind-pairing": "^2.3.1",
     "compact-encoding": "^3.5.2",
     "corestore": "^7.12.6",

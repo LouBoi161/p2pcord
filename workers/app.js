@@ -12,6 +12,7 @@ const { pipelinePromise } = require('streamx')
 
 const Space = require('./space')
 const Presence = require('./presence')
+const Relay = require('./relay')
 const Vault = require('./vault')
 
 const MAX_FILE = 2 * 1024 * 1024 * 1024 // 2 GB
@@ -58,6 +59,7 @@ class App extends ReadyResource {
     })
     this.presence.on('change', () => this.send('peers', this.presence.snapshot()))
     this.presence.on('signal', (s) => this.send('signal', s))
+    this.relay = new Relay()
     this.presence.on('avatar', (a) => this._onAvatar(a))
   }
 
@@ -89,7 +91,10 @@ class App extends ReadyResource {
       conn.on('error', noop)
       this.store.replicate(conn)
       this.presence.attach(conn)
+      this.relay.attach(conn)
     })
+    // Without the relay calls still work where a direct path exists
+    await this.relay.listen().catch((err) => this._warn(err))
     this.pairing = new BlindPairing(this.swarm)
 
     // Open known spaces in the background so the UI appears immediately
@@ -113,6 +118,7 @@ class App extends ReadyResource {
     for (const space of this.spaces.values()) await space.close().catch(noop)
     for (const list of this.archives.values()) for (const space of list) await space.close().catch(noop)
     await this.pairing.close()
+    this.relay.close()
     await this.swarm.destroy()
     await this.store.close()
     await this._clearFileCache().catch(noop)
@@ -603,6 +609,11 @@ class App extends ReadyResource {
 
   signal ({ to, space, data }) {
     return this.presence.signal(to, space, data)
+  }
+
+  // The local TURN server the UI adds to its ICE servers (null if it could not start)
+  relayInfo () {
+    return this.relay.info()
   }
 }
 

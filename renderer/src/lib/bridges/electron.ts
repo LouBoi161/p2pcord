@@ -10,6 +10,7 @@ export function electronBridge (p2p: any): Bridge {
     fileUrl: async (rel: string) => 'p2pfile://local/' + rel.split('/').map(encodeURIComponent).join('/'),
     notify: null,
     setCallActive: () => {},
+    keepAwake: () => {},
     onBack: () => () => {}
   }
 }

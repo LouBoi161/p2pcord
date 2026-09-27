@@ -102,6 +102,7 @@ export const ui = $state({
   lastChannel: {} as Record<string, string>,
   reads: loadReads(),
   joining: [] as string[],
+  slowJoins: {} as Record<string, boolean>, // joins waiting long: the inviter's app is probably closed
   toasts: [] as Toast[],
   messages: {} as Record<string, Message[]>,
   hasMore: {} as Record<string, boolean>,
@@ -322,6 +323,7 @@ export function setSoundPlayer (fn: (kind: string) => void) {
 function onSpace (state: Space) {
   const prev = ui.spaces[state.id]
   ui.spaces[state.id] = state
+  checkJoined(state)
   if (!ui.order.includes(state.id) && state.kind === KIND_GROUP) {
     ui.order.push(state.id)
     localStorage.setItem('p2pcord:order', JSON.stringify(ui.order))
@@ -444,13 +446,45 @@ export async function createDmInvite () {
   onSpace(state)
   openDm(state.id)
   const code = await call<string>('createInvite', { id: state.id, maxUses: 1 })
+  awaitJoin(state)
   return { space: state, code }
+}
+
+// Only the inviting device can let someone in, and phones freeze apps in the
+// background (e.g. while the code is sent through a messenger): keep the app
+// reachable until someone joined, for 10 minutes at most
+const INVITE_WAIT = 10 * 60 * 1000
+const awaiting = new Map<string, number>() // space id -> member count when invited
+let awaitTimer: ReturnType<typeof setTimeout> | null = null
+
+export function awaitJoin (space: Space) {
+  awaiting.set(space.id, space.members.length)
+  bridge.keepAwake(INVITE_WAIT)
+  if (awaitTimer) clearTimeout(awaitTimer)
+  awaitTimer = setTimeout(() => {
+    awaiting.clear()
+    awaitTimer = null
+  }, INVITE_WAIT)
+}
+
+function checkJoined (state: Space) {
+  const before = awaiting.get(state.id)
+  if (before === undefined || state.members.length <= before) return
+  awaiting.delete(state.id)
+  if (awaiting.size) return
+  bridge.keepAwake(0)
+  if (awaitTimer) clearTimeout(awaitTimer)
+  awaitTimer = null
 }
 
 export async function join (code: string) {
   code = code.trim().replace(/^p2pcord:\/\/(invite\/)?/i, '')
   if (!code) return
   ui.joining.push(code)
+  const slow = setTimeout(() => {
+    ui.slowJoins[code] = true
+    toast('Das dauert länger als sonst: Wer den Code erstellt hat, muss P2Pcord gerade geöffnet haben.')
+  }, 20000)
   try {
     const state = await call<Space>('joinSpace', { code })
     onSpace(state)
@@ -460,6 +494,8 @@ export async function join (code: string) {
   } catch (err) {
     if (!String(err).includes('ABORTED')) toast(errorText(err), 'error')
   } finally {
+    clearTimeout(slow)
+    delete ui.slowJoins[code]
     ui.joining = ui.joining.filter((c) => c !== code)
   }
 }

@@ -196,6 +196,9 @@ sideloading. P2Pcord therefore runs as a **web app** on iPhones and borrows a fr
 - Offline delivery needs at least one group member to be online.
 - For calls, WebRTC asks a public **STUN** server for your public address (address lookup only, no content);
   you can change it or add your own TURN server under ⚙ → *Network*.
+- When WebRTC finds no direct path (e.g. both on mobile data), the call runs through the P2P connection you
+  already share: every app has its own small TURN relay listening on `127.0.0.1` only. No third-party server;
+  media stays end-to-end encrypted (DTLS-SRTP).
 - Every 6 hours the app asks the **GitHub API** for the latest release (GitHub sees your IP address).
   Start it with `--no-updates` to turn that off.
 - The code has **not been audited** by a third party.

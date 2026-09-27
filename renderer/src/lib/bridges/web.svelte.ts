@@ -434,6 +434,7 @@ export function webBridge (): Bridge {
     },
     notify: null,
     setCallActive: () => {},
+    keepAwake: () => {},
     onBack: () => () => {}
   }
 }

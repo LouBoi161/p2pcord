@@ -74,7 +74,7 @@
     </div>
     {#if !settings.collapsed['nav:chats']}
       {#each ui.joining as code (code)}
-        <div class="row joining"><span class="spinner"></span><span class="name">Trete bei…</span><button class="add" title="Abbrechen" onclick={() => cancelJoin(code)}><Icon name="x" size={14} /></button></div>
+        <div class="row joining"><span class="spinner"></span><span class="name" title={ui.slowJoins[code] ? 'Dauert es länger? Wer den Code erstellt hat, muss P2Pcord geöffnet haben.' : ''}>{ui.slowJoins[code] ? 'Warte auf Einladenden…' : 'Trete bei…'}</span><button class="add" title="Abbrechen" onclick={() => cancelJoin(code)}><Icon name="x" size={14} /></button></div>
       {/each}
       {#each dms() as dm (dm.id)}
         {@const partner = dmPartner(dm)}
