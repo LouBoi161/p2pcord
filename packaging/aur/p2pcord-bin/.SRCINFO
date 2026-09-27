@@ -1,6 +1,6 @@
 pkgbase = p2pcord-bin
 	pkgdesc = Serverless, end-to-end encrypted voice, video and text chat for friends (P2P, Holepunch stack)
-	pkgver = 0.3.0
+	pkgver = 0.4.0
 	pkgrel = 1
 	url = https://github.com/LouBoi161/p2pcord
 	arch = x86_64
@@ -24,10 +24,10 @@ pkgbase = p2pcord-bin
 	conflicts = p2pcord
 	options = !strip
 	options = !debug
-	source = P2Pcord-linux-x64-0.3.0.zip::https://github.com/LouBoi161/p2pcord/releases/download/v0.3.0/P2Pcord-linux-x64-0.3.0.zip
+	source = P2Pcord-linux-x64-0.4.0.zip::https://github.com/LouBoi161/p2pcord/releases/download/v0.4.0/P2Pcord-linux-x64-0.4.0.zip
 	source = p2pcord.desktop
 	source = p2pcord.sh
-	sha256sums = 14bad63ddb5cdc8bef68e17b2609919c2db5a024f216bd36314a1409b605061d
+	sha256sums = 772de4694ad247650af53625e552874f78aff6a88b9c4ce19b1ec7b060f15dfe
 	sha256sums = 5c95a5c31dab4502601b83300d9ca46370d3ff240bd5fd184bf79715d2b30c1a
 	sha256sums = cffcfcd9f6657e614b66bc0db9af115f69ad820d9d88efe156106b33834a19c2
 

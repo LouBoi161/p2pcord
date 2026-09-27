@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.4.0
 
 - **Reactions** on messages: quick 👍 ❤️ 😂 in the hover bar, a picker with 48 emojis, *React* in the right-click
   menu (long press on phones); click a reaction to join or take it back, hover to see who reacted
