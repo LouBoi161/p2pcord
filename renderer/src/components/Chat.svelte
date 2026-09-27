@@ -313,9 +313,16 @@
 >
   {#if space && channel}
     <header>
-      <button class="icon-btn fold-side" title={settings.sidebarHidden ? 'Kanalliste einblenden' : 'Kanalliste ausblenden'} onclick={() => { settings.sidebarHidden = !settings.sidebarHidden; saveSettings() }}>
-        <Icon name="panel-left" size={18} />
-      </button>
+      {#if compact}
+        <!-- next to a call the chat is the right panel: this button folds the chat itself -->
+        <button class="icon-btn fold-side" title="Chat einklappen" onclick={() => { settings.callChat = false; saveSettings() }}>
+          <Icon name="panel-right" size={18} />
+        </button>
+      {:else}
+        <button class="icon-btn fold-side" title={settings.sidebarHidden ? 'Kanalliste einblenden' : 'Kanalliste ausblenden'} onclick={() => { settings.sidebarHidden = !settings.sidebarHidden; saveSettings() }}>
+          <Icon name="panel-left" size={18} />
+        </button>
+      {/if}
       {#if isDm}
         <Avatar id={partner?.identity || space.id} name={title} size={24} status={partner ? (isOnline(partner.identity) ? 'online' : 'offline') : null} />
       {:else}

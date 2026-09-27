@@ -101,6 +101,9 @@
 
 <section class="call">
   <header>
+    <button class="icon-btn fold" title={settings.sidebarHidden ? 'Kanalliste einblenden' : 'Kanalliste ausblenden'} onclick={() => { settings.sidebarHidden = !settings.sidebarHidden; saveSettings() }}>
+      <Icon name="panel-left" size={18} />
+    </button>
     <Icon name="volume" size={20} />
     <span class="title">{channel?.name || 'Anruf'}</span>
     {#if space}<span class="sub">{space.kind === KIND_DM ? spaceTitle(space) : space.name}</span>{/if}
@@ -109,8 +112,8 @@
     {#if voice.noiseActive !== 'off'}
       <span class="badge ai" title="Hintergrundgeräusche werden lokal auf deinem Gerät entfernt"><Icon name="sparkles" size={12} stroke={2.5} /> <span class="badge-text">{voice.noiseActive === 'dfn3' ? 'KI-Rauschfilter' : 'RNNoise'}</span></span>
     {/if}
-    <button class="icon-btn" class:on={settings.callChat} title={settings.callChat ? 'Chat ausblenden' : 'Chat einblenden'} onclick={() => { settings.callChat = !settings.callChat; saveSettings() }}>
-      <Icon name="chat" size={18} />
+    <button class="icon-btn" class:on={settings.callChat} title={settings.callChat ? 'Chat einklappen' : 'Chat ausklappen'} onclick={() => { settings.callChat = !settings.callChat; saveSettings() }}>
+      <Icon name={settings.callChat ? 'panel-right' : 'chat'} size={18} />
     </button>
   </header>
 
@@ -249,6 +252,10 @@
     gap: 8px;
     padding: 0 12px 0 16px;
     color: var(--text-muted);
+  }
+  .fold {
+    margin-left: -8px;
+    width: 28px;
   }
   .title {
     color: var(--text-strong);
