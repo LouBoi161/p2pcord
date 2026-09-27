@@ -126,16 +126,19 @@
       <div class="section"><span>Direktnachrichten</span></div>
       {#each dms() as dm (dm.id)}
         {@const partner = dmPartner(dm)}
-        <button
-          class="dm"
-          class:active={ui.chat?.space === dm.id}
-          class:unread={spaceUnread(dm) && ui.chat?.space !== dm.id}
-          onclick={() => openDm(dm.id)}
-        >
-          <Avatar id={partner?.identity || dm.id} name={dmLabel(dm)} size={32} status={partner ? (isOnline(partner.identity) ? 'online' : 'offline') : null} />
-          <span class="name">{dmLabel(dm)}</span>
-          {#if voice.active?.space === dm.id}<Icon name="volume" size={14} />{/if}
-        </button>
+        <div class="dm-row">
+          <button
+            class="dm"
+            class:active={ui.chat?.space === dm.id}
+            class:unread={spaceUnread(dm) && ui.chat?.space !== dm.id}
+            onclick={() => openDm(dm.id)}
+          >
+            <Avatar id={partner?.identity || dm.id} name={dmLabel(dm)} size={32} status={partner ? (isOnline(partner.identity) ? 'online' : 'offline') : null} />
+            <span class="name">{dmLabel(dm)}</span>
+            {#if voice.active?.space === dm.id}<Icon name="volume" size={14} />{/if}
+          </button>
+          <button class="remove" title="Freund entfernen" onclick={() => (ui.dialog = { type: 'leave', space: dm.id })}><Icon name="x" size={16} /></button>
+        </div>
       {:else}
         <p class="empty">Noch keine Freunde. Klick auf „Freund hinzufügen“ und schick den Code an einen Freund.</p>
       {/each}
@@ -325,6 +328,27 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     flex: 1;
+  }
+  .dm-row {
+    position: relative;
+  }
+  .dm-row .dm {
+    padding-right: 30px;
+  }
+  .remove {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: none;
+    color: var(--text-muted);
+  }
+  .remove:hover {
+    color: var(--text-strong);
+  }
+  .dm-row:hover .remove,
+  .remove:focus-visible {
+    display: flex;
   }
   .voice-user {
     display: flex;

@@ -14,6 +14,7 @@
     join,
     leave,
     isOnline,
+    dmPartner,
     TEXT,
     VOICE,
     ROLE_ADMIN,
@@ -365,6 +366,19 @@
         <button class="btn small secondary" onclick={rotate}><Icon name="key" size={14} /> Gruppenschlüssel erneuern</button>
       </div>
     {/if}
+  </Modal>
+{:else if d?.type === 'leave' && space?.kind === KIND_DM}
+  {@const friend = dmPartner(space)?.name}
+  <Modal title="Freund entfernen" onclose={close}>
+    {#if friend}
+      <p class="center">Willst du <strong>{friend}</strong> wirklich als Freund entfernen? Der Chat verschwindet aus deiner Liste. Ihr könnt euch nur mit einem neuen Freundescode wieder verbinden.</p>
+    {:else}
+      <p class="center">Noch hat niemand deinen Freundescode eingelöst. Willst du den Eintrag entfernen? Der Code wird damit ungültig.</p>
+    {/if}
+    {#snippet footer()}
+      <button class="btn ghost" onclick={close}>Abbrechen</button>
+      <button class="btn danger" onclick={doLeave}>Entfernen</button>
+    {/snippet}
   </Modal>
 {:else if d?.type === 'leave' && space}
   <Modal title={`${space.name} verlassen`} onclose={close}>

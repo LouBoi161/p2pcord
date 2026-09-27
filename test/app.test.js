@@ -110,3 +110,37 @@ test('two apps: join, presence, signaling, files, persistence', async (t) => {
   t.is(init.name, 'Louis')
   t.is(init.spaces.length, 1)
 })
+
+test('friends can be removed, also while the invite is still pending', async (t) => {
+  const testnet = await createTestnet(3, { teardown: t.teardown })
+  const dirA = await tmp(t)
+  const { app: a } = createApp(t, testnet, dirA)
+  const { app: b } = createApp(t, testnet, await tmp(t))
+  await a.ready()
+  await b.ready()
+
+  // "Waiting for friend": nobody redeemed the code yet
+  const waiting = await a.createSpace({ kind: 1 })
+  await a.createInvite({ id: waiting.id })
+  t.ok(await a.leaveSpace({ id: waiting.id }))
+  t.absent(a.spaces.has(waiting.id))
+
+  // An actual friend
+  const dm = await a.createSpace({ kind: 1 })
+  const code = await a.createInvite({ id: dm.id })
+  await b.joinSpace({ code })
+  await until(async () => (await b.getSpace({ id: dm.id })).members.length === 2)
+  t.ok(await a.leaveSpace({ id: dm.id }))
+  t.absent(a.spaces.has(dm.id))
+  await until(async () => (await b.getSpace({ id: dm.id })).members.length === 1)
+
+  // The friend can drop the now empty chat as well
+  t.ok(await b.leaveSpace({ id: dm.id }))
+  t.absent(b.spaces.has(dm.id))
+
+  // Removed chats stay gone after a restart
+  await a.close()
+  const { app: a2 } = createApp(t, testnet, dirA)
+  await a2.ready()
+  t.is((await a2.init()).spaces.length, 0)
+})

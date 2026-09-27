@@ -275,6 +275,7 @@
         {:else}
           <button class="icon-btn" title="Einladungscode" onclick={() => (ui.dialog = { type: 'invite', space: space!.id })}><Icon name="user-plus" size={20} /></button>
         {/if}
+        <button class="icon-btn" title="Freund entfernen" onclick={() => (ui.dialog = { type: 'leave', space: space!.id })}><Icon name="user-x" size={20} /></button>
       {:else}
         <button class="icon-btn" title="Mitglieder" onclick={() => (ui.dialog = { type: 'members', space: space!.id })}><Icon name="users" size={20} /></button>
       {/if}
