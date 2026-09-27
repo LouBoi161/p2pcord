@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.2.0
 
 - The AppImage updates itself: new releases are downloaded in the background, verified against the signed
   `SHA256SUMS` and installed with one click on *Restart*; other installs show a notice
