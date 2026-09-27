@@ -50,6 +50,14 @@ export interface Bridge {
   setCallActive(active: boolean): void
   // Mobile: keeps the app reachable in the background for ms (an open invite); 0 ends it
   keepAwake(ms: number): void
+  // Android: stay reachable in the background (backend notifies); null elsewhere
+  background: {
+    get(): Promise<{ on: boolean; battery: boolean }>
+    set(on: boolean): Promise<{ on: boolean; battery: boolean }>
+    batteryExempt(): Promise<void>
+  } | null
+  // A tapped system notification asks to open this chat
+  onOpenChat(listener: (space: string, channel: string | null) => void): () => void
   // Android back button: return true when the UI handled it
   onBack(listener: () => boolean): () => void
 }

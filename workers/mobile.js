@@ -5,4 +5,4 @@
 const path = require('path')
 const { serve } = require('./rpc')
 
-serve(BareKit.IPC, path.join(Bare.argv[0], 'p2pcord'))
+serve(BareKit.IPC, path.join(Bare.argv[0], 'p2pcord'), { notify: true })

@@ -11,6 +11,8 @@ export function electronBridge (p2p: any): Bridge {
     notify: null,
     setCallActive: () => {},
     keepAwake: () => {},
+    background: null,
+    onOpenChat: () => () => {},
     onBack: () => () => {}
   }
 }

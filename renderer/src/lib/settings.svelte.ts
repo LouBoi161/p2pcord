@@ -23,6 +23,7 @@ export interface Settings {
   turnUser: string
   turnPass: string
   notifications: boolean
+  background: boolean // Android: stay reachable in the background
   sounds: boolean
   volumes: Record<string, number> // per identity, 0..1
   localMutes: Record<string, boolean> // people muted only for us
@@ -68,6 +69,7 @@ const DEFAULTS: Settings = {
   turnUser: '',
   turnPass: '',
   notifications: true,
+  background: true,
   sounds: true,
   volumes: {},
   localMutes: {},

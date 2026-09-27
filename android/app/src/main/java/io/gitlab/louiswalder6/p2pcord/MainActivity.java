@@ -125,6 +125,8 @@ public final class MainActivity extends Activity implements Backend.Listener {
 
     backend.setListener(this);
     backend.start();
+    if (Background.enabled(this)) ConnectionService.start(this);
+    openFrom(getIntent());
 
     String query = "?platform=android&version=" + Uri.encode(BuildConfig.VERSION_NAME) + (BuildConfig.DEBUG ? "&debug=1" : "");
     web.loadUrl(ORIGIN + "/ui/index.html" + query);
@@ -159,8 +161,42 @@ public final class MainActivity extends Activity implements Backend.Listener {
     super.onDestroy();
   }
 
-  // The WebView keeps running in the background (no onPause): voice activity
-  // and presence must not stop when another app is in front.
+  // In the background the backend takes over notifications. Without a call the
+  // page is paused to save battery; during a call it keeps running (the call
+  // lives in the WebView).
+  @Override
+  protected void onStart() {
+    super.onStart();
+    web.onResume();
+    web.resumeTimers();
+    backend.setVisible(true);
+    Notifications.clearMessages(this);
+  }
+
+  @Override
+  protected void onStop() {
+    backend.setVisible(false);
+    if (!callActive) {
+      web.onPause();
+      web.pauseTimers();
+    }
+    super.onStop();
+  }
+
+  @Override
+  protected void onNewIntent(Intent intent) {
+    super.onNewIntent(intent);
+    openFrom(intent);
+  }
+
+  // A tapped notification opens its chat
+  private void openFrom(Intent intent) {
+    if (intent == null) return;
+    String space = intent.getStringExtra(Notifications.EXTRA_SPACE);
+    if (space == null || space.isEmpty()) return;
+    post(obj("t", "open", "space", space, "channel", intent.getStringExtra(Notifications.EXTRA_CHANNEL)));
+    intent.removeExtra(Notifications.EXTRA_SPACE);
+  }
 
   @SuppressWarnings("deprecation")
   @Override
@@ -256,6 +292,14 @@ public final class MainActivity extends Activity implements Backend.Listener {
           break;
         case "awake":
           keepAwake(args.optLong(0));
+          respond(id, null);
+          break;
+        case "background":
+          if (args.length() > 0) Background.set(this, args.optBoolean(0));
+          respond(id, obj("on", Background.enabled(this), "battery", Background.batteryExempt(this)));
+          break;
+        case "battery":
+          Background.requestBatteryExempt(this);
           respond(id, null);
           break;
         case "exit":

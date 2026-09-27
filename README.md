@@ -199,6 +199,8 @@ sideloading. P2Pcord therefore runs as a **web app** on iPhones and borrows a fr
 - When WebRTC finds no direct path (e.g. both on mobile data), the call runs through the P2P connection you
   already share: every app has its own small TURN relay listening on `127.0.0.1` only. No third-party server;
   media stays end-to-end encrypted (DTLS-SRTP).
+- Android: with *Stay reachable in the background* a foreground service keeps the P2P connection so
+  notifications work while the app is closed; they are decided on the phone, no push service is involved.
 - Every 6 hours the app asks the **GitHub API** for the latest release (GitHub sees your IP address).
   Start it with `--no-updates` to turn that off.
 - The code has **not been audited** by a third party.

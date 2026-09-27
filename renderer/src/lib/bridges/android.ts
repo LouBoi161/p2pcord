@@ -6,6 +6,7 @@
 //   app -> page  { t: 'frame', d }             one frame from the backend
 //                { t: 'res', id, r?, e? }      answer to a 'req'
 //                { t: 'exit', code } | { t: 'back' } | { t: 'update', s }
+//                { t: 'open', space, channel }  a tapped notification
 import type { Bridge, BridgeInfo } from './types'
 import type { UpdateState } from '../update.svelte'
 
@@ -29,6 +30,8 @@ export function androidBridge (native: any): Bridge {
   const exits = new Set<(code: number) => void>()
   const updates = new Set<(s: UpdateState) => void>()
   const backs: (() => boolean)[] = []
+  const opens = new Set<(space: string, channel: string | null) => void>()
+  let openLater: { space: string; channel: string | null } | null = null // before anyone listens
   const pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>()
   let next = 1
 
@@ -52,6 +55,10 @@ export function androidBridge (native: any): Bridge {
       for (const fn of exits) fn(m.code)
     } else if (m.t === 'update') {
       for (const fn of updates) fn(m.s)
+    } else if (m.t === 'open' && typeof m.space === 'string') {
+      const channel = typeof m.channel === 'string' ? m.channel : null
+      if (opens.size) for (const fn of opens) fn(m.space, channel)
+      else openLater = { space: m.space, channel }
     } else if (m.t === 'back') {
       // newest listener first (an open dialog before the navigation below it)
       for (let i = backs.length - 1; i >= 0; i--) if (backs[i]()) return
@@ -110,6 +117,20 @@ export function androidBridge (native: any): Bridge {
     },
     keepAwake: (ms) => {
       req('awake', Math.max(0, Math.round(ms))).catch(() => {})
+    },
+    background: {
+      get: () => req('background'),
+      set: (on) => req('background', !!on),
+      batteryExempt: () => req('battery')
+    },
+    onOpenChat: (fn) => {
+      opens.add(fn)
+      if (openLater) {
+        const o = openLater
+        openLater = null
+        fn(o.space, o.channel)
+      }
+      return () => opens.delete(fn)
     },
     onBack: (fn) => {
       backs.push(fn)

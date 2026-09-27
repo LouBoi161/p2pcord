@@ -6,6 +6,7 @@ const b4a = require('b4a')
 
 const App = require('./app')
 const Guests = require('./guests')
+const Notifier = require('./notifier')
 
 const METHODS = new Set([
   'init',
@@ -48,6 +49,7 @@ const HOST_METHODS = new Set(['guestOpen', 'guestRpc', 'guestClose', 'guestDrop'
  * @param {string} storage directory for the backend data
  * @param {object} [opts]
  * @param {boolean} [opts.guests] allow hosting bridged guests (desktop only)
+ * @param {boolean} [opts.notify] decide notifications in the backend (phones), sent as 'notify' events
  */
 function serve (ipc, storage, opts = {}) {
   const pipe = new FramedStream(ipc)
@@ -55,13 +57,28 @@ function serve (ipc, storage, opts = {}) {
 
   let app = null
   let guests = null
+  let notifier = null
 
   // The first frame carries the vault key (from the OS keychain / Android Keystore)
   function start ({ key, mode, error }) {
+    if (opts.notify) {
+      notifier = new Notifier({
+        storage,
+        me: () => (app && app.identity ? b4a.toString(app.identity.publicKey, 'hex') : null),
+        myVoice: () => (app && app.presence ? app.presence.voice : null),
+        emit: (data) => write({ event: 'notify', data })
+      })
+    }
     app = new App(storage, {
       vaultKey: key ? b4a.from(key, 'hex') : null,
       vaultMode: mode,
-      emit: (event, data) => write({ event, data })
+      emit: (event, data) => {
+        write({ event, data })
+        if (!notifier) return
+        if (event === 'space') notifier.onSpace(data).catch(() => {})
+        else if (event === 'space:removed') notifier.onRemoved(data.id)
+        else if (event === 'peers') notifier.onPeers(data)
+      }
     })
     if (opts.guests) {
       guests = new Guests(storage, {
@@ -70,6 +87,7 @@ function serve (ipc, storage, opts = {}) {
       })
     }
     goodbye(async () => {
+      if (notifier) notifier.close()
       if (guests) await guests.closeAll()
       await app.close()
     })
@@ -98,6 +116,12 @@ function serve (ipc, storage, opts = {}) {
       return
     }
     if (!msg || typeof msg.id !== 'number') return
+    if (msg.method === 'setNotify') {
+      // answered even without a notifier, so the UI never waits on it
+      const result = notifier ? await notifier.setPrefs(msg.params || {}) : false
+      write({ id: msg.id, result })
+      return
+    }
     const host = guests && HOST_METHODS.has(msg.method)
     if (!host && !METHODS.has(msg.method)) return
     try {

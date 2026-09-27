@@ -44,8 +44,12 @@ final class Backend {
   private Listener listener;
   private boolean exited = false;
 
-  // frames that arrived before the page was listening
+  // frames that arrived before the page was listening. Without a page (started
+  // at boot) this must not grow forever: the page asks for the full state on
+  // start anyway, so only the start-up events are kept for sure
+  private static final int MAX_EARLY = 500;
   private final List<String> early = new ArrayList<>();
+  private final List<String> essential = new ArrayList<>();
 
   private ByteBuffer pending = ByteBuffer.allocate(64 * 1024).order(ByteOrder.LITTLE_ENDIAN);
   private final ArrayDeque<ByteBuffer> writes = new ArrayDeque<>();
@@ -77,7 +81,9 @@ final class Backend {
   void setListener(Listener l) {
     listener = l;
     if (l == null) return;
+    for (String f : essential) l.onFrame(f);
     for (String f : early) l.onFrame(f);
+    essential.clear();
     early.clear();
     if (exited) l.onExit();
   }
@@ -130,8 +136,33 @@ final class Backend {
   }
 
   private void deliver(String frame) {
-    if (listener != null) listener.onFrame(frame);
-    else early.add(frame);
+    // notifications are for the system, not the page (JSON.stringify keeps "event" first)
+    if (frame.startsWith("{\"event\":\"notify\"")) {
+      try {
+        Notifications.show(context, new JSONObject(frame).getJSONObject("data"));
+      } catch (JSONException | RuntimeException e) {
+        Log.w(TAG, "notify", e);
+      }
+      return;
+    }
+    if (listener != null) {
+      listener.onFrame(frame);
+    } else if (frame.startsWith("{\"event\":\"ready\"") || frame.startsWith("{\"event\":\"fatal\"")) {
+      essential.add(frame);
+    } else {
+      early.add(frame);
+      if (early.size() > MAX_EARLY) early.remove(0);
+    }
+  }
+
+  // Whether the UI is on screen: the backend only notifies while it is not
+  void setVisible(boolean visible) {
+    if (worklet == null) return;
+    try {
+      JSONObject params = new JSONObject().put("visible", visible);
+      send(new JSONObject().put("id", -1).put("method", "setNotify").put("params", params).toString());
+    } catch (JSONException ignored) {
+    }
   }
 
   void send(String frame) {

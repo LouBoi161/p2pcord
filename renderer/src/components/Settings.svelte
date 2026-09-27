@@ -23,6 +23,27 @@
   let current = $state(info.mobile && tab === 'profile' ? '' : tab)
 
   let name = $state(ui.name)
+
+  // Android: background connection and battery exemption
+  let bg = $state<{ on: boolean; battery: boolean } | null>(null)
+  function refreshBackground () {
+    bridge.background?.get().then((r) => (bg = r)).catch(() => {})
+  }
+  refreshBackground()
+  async function setBackground () {
+    saveSettings()
+    bg = await bridge.background!.set(settings.background).catch(() => bg)
+  }
+  async function askBattery () {
+    await bridge.background!.batteryExempt().catch(() => {})
+    // the system dialog answers without telling us: look again when the user is back
+    const back = () => {
+      if (document.visibilityState !== 'visible') return
+      document.removeEventListener('visibilitychange', back)
+      refreshBackground()
+    }
+    document.addEventListener('visibilitychange', back)
+  }
   let inputs = $state<MediaDeviceInfo[]>([])
   let outputs = $state<MediaDeviceInfo[]>([])
   let cameras = $state<MediaDeviceInfo[]>([])
@@ -410,8 +431,24 @@
         <h1>Benachrichtigungen & Töne</h1>
         <label class="check">
           <input type="checkbox" bind:checked={settings.notifications} onchange={() => saveSettings()} />
-          <span>Desktop-Benachrichtigungen für neue Nachrichten</span>
+          <span>{info.mobile ? 'Benachrichtigungen' : 'Desktop-Benachrichtigungen'} für neue Nachrichten</span>
         </label>
+        {#if bridge.background}
+          <label class="check">
+            <input type="checkbox" bind:checked={settings.background} onchange={setBackground} />
+            <span>Im Hintergrund erreichbar bleiben</span>
+          </label>
+          <p class="hint">
+            Nachrichten und Anrufe kommen auch an, wenn P2Pcord geschlossen ist oder das Handy neu gestartet wurde – ganz ohne Server.
+            Android zeigt dafür eine dauerhafte, stille Benachrichtigung („P2Pcord ist erreichbar“); du kannst sie in den
+            App-Benachrichtigungen unter „Hintergrundverbindung“ ausblenden. Schläft das Handy tief, holt P2Pcord etwa alle 15 Minuten
+            kurz Nachrichten ab, sonst kommen sie sofort. Ohne diese Option kommen Nachrichten nur, solange die App offen ist.
+          </p>
+          {#if settings.background && bg && !bg.battery}
+            <p class="hint">Manche Hersteller (z. B. Samsung, Xiaomi, Huawei) beenden Apps im Hintergrund trotzdem. Dann hilft:</p>
+            <button class="btn secondary" onclick={askBattery}>Akku-Optimierung für P2Pcord ausschalten</button>
+          {/if}
+        {/if}
         <label class="check">
           <input type="checkbox" bind:checked={settings.sounds} onchange={() => saveSettings()} />
           <span>Töne abspielen</span>

@@ -8,6 +8,8 @@ public final class P2PApp extends Application {
   static final String CHANNEL_MESSAGES = "messages";
   static final String CHANNEL_CALL = "call";
   static final String CHANNEL_WAIT = "invite";
+  static final String CHANNEL_BACKGROUND = "background";
+  static final String CHANNEL_RING = "ring";
 
   private Backend backend;
 
@@ -22,6 +24,10 @@ public final class P2PApp extends Application {
     NotificationChannel wait = new NotificationChannel(CHANNEL_WAIT, "Offene Einladung", NotificationManager.IMPORTANCE_LOW);
     wait.setShowBadge(false);
     nm.createNotificationChannel(wait);
+    NotificationChannel bg = new NotificationChannel(CHANNEL_BACKGROUND, "Hintergrundverbindung", NotificationManager.IMPORTANCE_MIN);
+    bg.setShowBadge(false);
+    nm.createNotificationChannel(bg);
+    nm.createNotificationChannel(new NotificationChannel(CHANNEL_RING, "Eingehende Anrufe", NotificationManager.IMPORTANCE_HIGH));
   }
 
   /** The backend runs once per process and outlives activities */

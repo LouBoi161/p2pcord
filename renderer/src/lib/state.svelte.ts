@@ -359,6 +359,8 @@ function notify (space: Space, channel: Channel) {
   try {
     const who = memberName(space, channel.latest!.author)
     const where = space.kind === KIND_DM ? who : `${space.name} · #${channel.name}`
+    // Android: the backend notifies (workers/notifier.js), also while this page sleeps
+    if (bridge.background) return
     if (bridge.notify) {
       bridge.notify(where, space.kind === KIND_DM ? 'Neue Nachricht' : `${who}: Neue Nachricht`)
       return
@@ -414,10 +416,32 @@ export async function boot () {
     for (const s of init.spaces) onSpace(s)
     ui.status = 'ready'
     openView(groups()[0]?.id || 'home')
+    if (bridge.background) setupPhoneNotifications()
   } catch (err) {
     ui.status = 'fatal'
     ui.error = errorText(err)
   }
+}
+
+// Android: the backend decides notifications, so it needs the switch and the
+// mute list; a tapped notification opens its chat
+function setupPhoneNotifications () {
+  bridge.background!.set(settings.background).catch(() => {})
+  $effect.root(() => {
+    $effect(() => {
+      const prefs = { enabled: settings.notifications, muted: $state.snapshot(settings.mutedChats) }
+      call('setNotify', prefs).catch(() => {})
+    })
+  })
+  bridge.onOpenChat((space, channel) => {
+    const s = ui.spaces[space]
+    if (!s) return
+    if (s.kind === KIND_DM) openDm(space)
+    else if (channel) {
+      ui.view = space
+      openChannel(space, channel)
+    } else openView(space)
+  })
 }
 
 // ---- actions ----

@@ -196,6 +196,8 @@ Freundes als **Brücke**:
 - Findet WebRTC keinen direkten Weg (z. B. beide im Mobilfunk), läuft der Anruf über eure bestehende
   P2P-Verbindung: jede App hat dafür einen eigenen kleinen TURN-Relay, der nur auf `127.0.0.1` lauscht.
   Kein fremder Server, die Medien bleiben Ende-zu-Ende verschlüsselt (DTLS-SRTP).
+- Android: Mit *Im Hintergrund erreichbar bleiben* hält ein Vordergrund-Dienst die P2P-Verbindung, damit
+  Benachrichtigungen auch bei geschlossener App kommen; sie entstehen auf dem Handy, ohne Push-Dienst.
 - Alle 6 Stunden fragt die App die **GitHub-API** nach dem neuesten Release (GitHub sieht dabei deine IP-Adresse).
   Mit `--no-updates` gestartet, lässt sie das.
 - Der Code wurde **nicht unabhängig geprüft** (kein Audit).

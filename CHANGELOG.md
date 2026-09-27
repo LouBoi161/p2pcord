@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.6.0
+
+- **Android: messages and calls arrive in the background** – also when the app was swiped away or the phone
+  restarted. The backend now decides notifications itself (new messages, a friend calling in your DM), a
+  foreground service keeps the P2P connection (*Settings → Notifications → Stay reachable in the background*,
+  on by default; Android shows a silent notification that can be hidden). Battery-friendly: no permanent wake
+  lock, the page sleeps in the background unless you are in a call, and in deep sleep the phone is woken about
+  every 15 minutes for a short sync
+- Tapping a notification opens its chat; incoming DM calls ring and stop ringing when the friend hangs up
+- Button to exempt P2Pcord from battery optimization (for phones that still stop background apps)
+
 ## v0.5.0
 
 - **Calls connect without a direct path**: when WebRTC cannot get through (both on mobile data, strict routers
