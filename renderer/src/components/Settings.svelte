@@ -11,12 +11,16 @@
   import { update, checkUpdates } from '../lib/update.svelte'
   import AppearanceSettings from './AppearanceSettings.svelte'
   import AvatarEditor from './AvatarEditor.svelte'
+  import BridgeSettings from './BridgeSettings.svelte'
+  import WebAccountSettings from './WebAccountSettings.svelte'
   import { playSound, soundEnabled, SOUND_EVENTS } from '../lib/voice/sounds'
   import { VIEW_QUALITIES, QUALITY_ORDER } from '../lib/voice/call.svelte'
 
   let { tab = 'profile', onclose }: { tab?: string; onclose: () => void } = $props()
+  const info = bridge.info()
+  // Phones: the tab list is its own screen, a page opens on top of it
   // svelte-ignore state_referenced_locally
-  let current = $state(tab)
+  let current = $state(info.mobile && tab === 'profile' ? '' : tab)
 
   let name = $state(ui.name)
   let inputs = $state<MediaDeviceInfo[]>([])
@@ -28,7 +32,6 @@
   let loopback: HTMLAudioElement | null = null
   let capturing = $state(false)
   let stunText = $state(settings.stunServers.join('\n'))
-  const info = bridge.info()
 
   async function loadDevices () {
     try {
@@ -123,8 +126,14 @@
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && !capturing && onclose()} />
 
-<div class="settings">
+<div class="settings" class:mobile={info.mobile} class:paged={info.mobile && !!current}>
   <nav>
+    {#if info.mobile}
+      <div class="mobile-head">
+        <h1>Einstellungen</h1>
+        <button class="close" onclick={onclose} title="Schließen"><Icon name="x" size={20} /></button>
+      </div>
+    {/if}
     <div class="nav-inner">
       <div class="group">Benutzereinstellungen</div>
       <button class:active={current === 'profile'} onclick={() => (current = 'profile')}>Mein Profil</button>
@@ -135,6 +144,11 @@
       <button class:active={current === 'streams'} onclick={() => (current = 'streams')}>Streams</button>
       <button class:active={current === 'notify'} onclick={() => (current = 'notify')}>Benachrichtigungen & Töne</button>
       <button class:active={current === 'network'} onclick={() => (current = 'network')}>Netzwerk</button>
+      {#if info.bridged}
+        <button class:active={current === 'web'} onclick={() => (current = 'web')}>Web-App & Brücken</button>
+      {:else if !info.mobile}
+        <button class:active={current === 'bridge'} onclick={() => (current = 'bridge')}>iPhone-Brücke</button>
+      {/if}
       <div class="sep"></div>
       <div class="version">P2Pcord {info.version}</div>
       {#if update.state.status === 'disabled'}
@@ -162,6 +176,9 @@
 
   <main class="thin-scroll">
     <div class="page">
+      {#if info.mobile}
+        <button class="back" onclick={() => (current = '')}><Icon name="chevron-left" size={20} /> Einstellungen</button>
+      {/if}
       {#if current === 'profile'}
         <h1>Mein Profil</h1>
         <div class="profile">
@@ -188,7 +205,11 @@
         <h1>Sicherheit</h1>
         <div class="card list">
           <div class="item"><Icon name="key" size={20} /><div><strong>Kein Account, kein Passwort</strong><p>Deine Identität ist ein Ed25519-Schlüsselpaar, das nur auf diesem Gerät liegt.</p></div></div>
-          {#if ui.vault === 'keyring'}
+          {#if ui.vault === 'bridge'}
+            <div class="item"><Icon name="lock" size={20} /><div><strong>Konto auf deinem Gerät</strong><p>Dein Schlüssel und deine Gruppenliste liegen auf diesem Gerät. Auf dem PC deiner Brücke liegen sie nur verschlüsselt mit einem Schlüssel, den nur dein Gerät hat – solange du verbunden bist, läuft dein Konto aber dort. Vertraue nur Brücken von Freunden.</p></div></div>
+          {:else if ui.vault === 'keyring' && info.platform === 'android'}
+            <div class="item"><Icon name="lock" size={20} /><div><strong>Lokale Daten verschlüsselt</strong><p>Dein Schlüssel, die Gruppenschlüssel und deine Gruppenliste sind verschlüsselt gespeichert. Der Tresor-Schlüssel ist durch den Android-Keystore geschützt.</p></div></div>
+          {:else if ui.vault === 'keyring'}
             <div class="item"><Icon name="lock" size={20} /><div><strong>Lokale Daten verschlüsselt</strong><p>Dein Schlüssel, die Gruppenschlüssel und deine Gruppenliste sind auf der Festplatte verschlüsselt. Der Tresor-Schlüssel liegt im Schlüsselbund deines Systems. Geöffnete Anhänge werden beim Beenden gelöscht.</p></div></div>
           {:else}
             <div class="item warn"><Icon name="lock" size={20} /><div><strong>Kein System-Schlüsselbund gefunden</strong><p>Deine lokalen Daten sind zwar verschlüsselt, aber der Tresor-Schlüssel liegt ungeschützt daneben. Installiere bzw. aktiviere einen Schlüsselbund (z. B. gnome-keyring oder KWallet) und starte P2Pcord neu.</p></div></div>
@@ -438,14 +459,20 @@
           </div>
         </div>
         <p class="hint">Änderungen gelten für den nächsten Anruf.</p>
+      {:else if current === 'bridge'}
+        <BridgeSettings />
+      {:else if current === 'web'}
+        <WebAccountSettings />
       {/if}
     </div>
   </main>
 
-  <div class="close-col">
-    <button class="close" onclick={onclose} title="Schließen (Esc)"><Icon name="x" size={20} /></button>
-    <span>ESC</span>
-  </div>
+  {#if !info.mobile}
+    <div class="close-col">
+      <button class="close" onclick={onclose} title="Schließen (Esc)"><Icon name="x" size={20} /></button>
+      <span>ESC</span>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -762,5 +789,62 @@
       opacity: 0;
       transform: scale(1.02);
     }
+  }
+  .back {
+    display: none;
+  }
+  .mobile-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 4px 8px 10px;
+  }
+  .mobile-head h1 {
+    margin: 0;
+  }
+  /* phones: tab list and page are two screens */
+  .settings.mobile {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  .settings.mobile nav {
+    flex: 1 1 auto;
+    flex-direction: column;
+    justify-content: flex-start;
+  }
+  .settings.mobile .mobile-head {
+    padding: 16px 12px 0 22px;
+  }
+  .settings.mobile .nav-inner {
+    width: 100%;
+    padding: 16px 12px 24px;
+  }
+  .settings.mobile nav button {
+    padding: 12px 10px;
+    font-size: 16px;
+  }
+  .settings.mobile main {
+    display: none;
+  }
+  .settings.mobile.paged nav {
+    display: none;
+  }
+  .settings.mobile.paged main {
+    display: block;
+    flex: 1 1 auto;
+  }
+  .settings.mobile .page {
+    padding: 12px 16px 60px;
+    max-width: none;
+  }
+  .settings.mobile .back {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--link);
+    font-size: 16px;
+    padding: 6px 0 14px;
+  }
+  .settings.mobile :global(.grid2) {
+    grid-template-columns: 1fr;
   }
 </style>

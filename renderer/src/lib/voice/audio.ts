@@ -112,6 +112,8 @@ export class Mic {
     await this.setNoise(settings.noise)
     this.setInputGain(settings.inputGain)
     this.pushGate()
+    // Safari and mobile WebViews may start the context suspended after the awaits above
+    if (this.ctx.state === 'suspended') await this.ctx.resume().catch(() => {})
 
     this.stream = this.dest.stream
     this.track = this.stream.getAudioTracks()[0]

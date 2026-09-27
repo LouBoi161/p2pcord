@@ -1,45 +1,10 @@
-// JSON-RPC to the Bare backend worker via the preload bridge.
-import type { UpdateState } from './update.svelte'
+// JSON-RPC to the P2P backend. Where the backend runs depends on the platform
+// (see bridges/): a Bare worker behind Electron, a Bare Kit worklet on Android,
+// or a friend's desktop app for the iPhone web app.
+import { bridge } from './bridges'
 
-export interface ScreenSource {
-  id: string
-  name: string
-  thumbnail: string | null
-}
-
-interface Bridge {
-  info(): { version: string; name: string; storage: string | null; platform: string; wayland: boolean; debug: boolean }
-  start(): Promise<boolean>
-  send(bytes: Uint8Array): Promise<boolean>
-  onMessage(listener: (bytes: Uint8Array) => void): () => void
-  onExit(listener: (code: number) => void): () => void
-  pathForFile(file: File): string
-  writeClipboard(text: string): Promise<void>
-  openExternal(url: string): Promise<boolean>
-  saveFile(rel: string, name: string): Promise<boolean>
-  screenSources(): Promise<ScreenSource[]>
-  selectScreen(id: string | null): Promise<boolean>
-  streamAudio: {
-    available(): Promise<boolean>
-    apps(): Promise<{ name: string; binary: string }[]>
-    start(app: string | null): Promise<boolean>
-    unmute(): Promise<boolean>
-    stop(): Promise<boolean>
-  }
-  onUpdateState(listener: (state: UpdateState) => void): () => void
-  updateState(): Promise<UpdateState>
-  checkUpdates(): Promise<UpdateState>
-  relaunch(): Promise<void>
-  setZoom(factor: number): void
-}
-
-declare global {
-  interface Window {
-    p2p: Bridge
-  }
-}
-
-export const bridge = window.p2p
+export { bridge }
+export type { Bridge, BridgeInfo, ScreenSource } from './bridges/types'
 
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()

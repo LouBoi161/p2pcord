@@ -24,8 +24,8 @@
     failed = false
     try {
       const res = await call<{ path: string }>('fetchFile', { id: space, base, file: $state.snapshot(file) })
+      url = await bridge.fileUrl(res.path, file.mime)
       rel = res.path
-      url = 'p2pfile://local/' + res.path.split('/').map(encodeURIComponent).join('/')
       return rel
     } catch {
       failed = true

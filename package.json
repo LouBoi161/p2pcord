@@ -11,6 +11,7 @@
   "scripts": {
     "build:db": "node schema.js",
     "build:ui": "node scripts/fetch-models.mjs && vite build --config renderer/vite.config.mjs",
+    "build:web": "node scripts/fetch-models.mjs && vite build --config renderer/vite.config.mjs --mode web",
     "dev:ui": "vite build --watch --config renderer/vite.config.mjs",
     "build": "npm run build:db && npm run build:ui",
     "start": "npm run build && electron-forge start -- --no-updates",
@@ -18,7 +19,9 @@
     "test": "brittle-node test/*.test.js",
     "package": "npm run build && electron-forge package",
     "make": "npm run build && electron-forge make --targets pear-electron-forge-maker-appimage && electron-forge make --skip-package --targets @electron-forge/maker-zip",
-    "make:win": "npm run build && electron-forge make --platform win32 --targets @electron-forge/maker-zip"
+    "make:win": "npm run build && electron-forge make --platform win32 --targets @electron-forge/maker-zip",
+    "android": "npm run build:db && node scripts/build-android.mjs",
+    "android:debug": "npm run build:db && node scripts/build-android.mjs --debug"
   },
   "imports": {
     "events": {
@@ -66,9 +69,13 @@
     "@electron-forge/cli": "^7.11.2",
     "@electron-forge/maker-msix": "^7.11.2",
     "@electron-forge/maker-zip": "^7.11.2",
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
     "@sapphi-red/web-noise-suppressor": "^0.4.1",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "app-builder-lib": "^26.15.3",
+    "bare-link": "^3.3.1",
+    "bare-pack": "^2.2.2",
     "brittle": "^4.2.0",
     "deepfilternet3-noise-filter": "^1.3.0",
     "electron": "^40.10.6",

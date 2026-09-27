@@ -25,6 +25,7 @@ class App extends ReadyResource {
    * @param {Buffer | null} [opts.vaultKey] key for at-rest encryption of local secrets
    * @param {'keyring' | 'weak' | 'none'} [opts.vaultMode] how the vault key itself is protected
    * @param {(event: string, data: any) => void} [opts.emit]
+   * @param {(name: string, data: Buffer) => void} [opts.onPersist] called with every (sealed) file written
    */
   constructor (storage, opts = {}) {
     super()
@@ -34,6 +35,7 @@ class App extends ReadyResource {
     this.vaultMode = this.vault.enabled ? opts.vaultMode || 'keyring' : 'none'
     this._migrating = false
     this.send = opts.emit || (() => {})
+    this.onPersist = opts.onPersist || null
 
     this.identity = null
     this.profile = { name: '' }
@@ -143,6 +145,7 @@ class App extends ReadyResource {
     if (this.vault.enabled) data = this.vault.seal(data)
     await fs.promises.writeFile(file + '.tmp', data)
     await fs.promises.rename(file + '.tmp', file)
+    if (this.onPersist) this.onPersist(name, data)
   }
 
   // Decrypted attachments only live here while the app runs

@@ -18,10 +18,44 @@
   import TsNav from './components/TsNav.svelte'
   import DesignWelcome from './components/DesignWelcome.svelte'
   import { settings, saveSettings } from './lib/settings.svelte'
+  import WebSetup from './components/WebSetup.svelte'
+  import { web } from './lib/bridges/web.svelte'
+  import { startBridgeHost } from './lib/bridge-host.svelte'
+  import { leaveVoice } from './lib/voice/call.svelte'
+
+  const info = bridge.info()
+  const mobile = info.mobile
 
   setSoundPlayer(playSound)
   initVoice()
-  boot()
+  boot().then(() => {
+    // desktop only: friends with an iPhone can use this app as their bridge
+    if (!info.bridged && !mobile && ui.status === 'ready') startBridgeHost()
+  })
+
+  // Phones: joining a call shows it; the Android back button walks back
+  let wasInCall = false
+  $effect(() => {
+    const active = !!voice.active
+    if (active && !wasInCall) ui.pane = 'call'
+    if (!active && ui.pane === 'call') ui.pane = ui.chat ? 'chat' : 'nav'
+    wasInCall = active
+    bridge.setCallActive(active)
+  })
+  $effect(() => {
+    if (!mobile) return
+    return bridge.onBack(() => {
+      if (ui.dialog) {
+        ui.dialog = null
+        return true
+      }
+      if (ui.pane !== 'nav') {
+        ui.pane = 'nav'
+        return true
+      }
+      return false
+    })
+  })
 
   const u = $derived(update.state)
   // Portrait, 4:3 or simply small windows: call on top, chat below instead of side by side
@@ -42,14 +76,16 @@
     e.preventDefault()
     settings.uiScale = Math.round(v * 100) / 100
     saveSettings()
-    window.p2p.setZoom(settings.uiScale)
+    bridge.setZoom(settings.uiScale)
   }
 
   const showUpdate = $derived(!update.dismissed && (u.status === 'ready' || u.status === 'downloading' || u.status === 'available' || (u.status === 'error' && !u.quiet)))
 </script>
 
-<div class="app">
-  {#if ui.status === 'loading'}
+<div class="app" class:mobile>
+  {#if info.bridged && web.status !== 'ready'}
+    <WebSetup />
+  {:else if ui.status === 'loading'}
     <div class="splash">
       <Logo size={80} />
       <span class="spinner"></span>
@@ -64,6 +100,25 @@
     </div>
   {:else if !ui.name}
     <Onboarding />
+  {:else if mobile}
+    <!-- phones: one screen at a time -->
+    {#if voice.active && ui.pane !== 'call'}
+      <button class="call-bar" onclick={() => (ui.pane = 'call')}>
+        <Icon name="volume" size={16} />
+        <span>{voice.joining ? 'Verbinde…' : 'Im Sprachkanal – tippen zum Zurückkehren'}</span>
+        <span class="hangup" role="button" tabindex="0" title="Auflegen" onclick={(e) => { e.stopPropagation(); leaveVoice() }} onkeydown={() => {}}><Icon name="phone-off" size={16} /></span>
+      </button>
+    {/if}
+    <div class="row">
+      {#if ui.pane === 'call' && voice.active}
+        <div class="main in-call stacked"><CallView onback={() => (ui.pane = 'nav')} onchat={() => (ui.pane = 'chat')} /></div>
+      {:else if ui.pane === 'chat' && ui.chat}
+        <div class="main"><Chat onback={() => (ui.pane = 'nav')} /></div>
+      {:else}
+        <Rail />
+        <Sidebar />
+      {/if}
+    </div>
   {:else}
     <div class="row">
       {#if ts}
@@ -136,8 +191,44 @@
     display: flex;
     flex-direction: column;
     height: 100vh;
+    height: 100dvh;
     width: 100vw;
     overflow: hidden;
+  }
+  /* phones: notch and home indicator (iOS), system bars are handled natively on Android */
+  .app.mobile {
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    background: var(--bg-rail);
+  }
+  .app.mobile :global(.sidebar) {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+  .app.mobile :global(.chat) {
+    min-width: 0;
+  }
+  .call-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--green);
+    color: #fff;
+    font-weight: 600;
+    font-size: 14px;
+    text-align: left;
+  }
+  .call-bar span:not(.hangup) {
+    flex: 1;
+  }
+  .hangup {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--red);
   }
   .row {
     flex: 1;
@@ -293,5 +384,16 @@
       transform: translateY(8px);
       opacity: 0;
     }
+  }
+  :global([data-mobile]) .incoming {
+    left: 12px;
+    right: 12px;
+    top: calc(env(safe-area-inset-top) + 8px);
+    min-width: 0;
+  }
+  :global([data-mobile]) .toasts {
+    bottom: calc(env(safe-area-inset-bottom) + 72px);
+    width: calc(100vw - 32px);
+    align-items: center;
   }
 </style>

@@ -44,6 +44,9 @@ friends directly. There is no server that can go down, get hacked or read along.
   (Windows; Linux via PipeWire)
 - **Two layouts** (like Discord or like TeamSpeak 6), color themes, custom colors, profile pictures,
   right-click menus everywhere
+- **Android app**: the full P2P app on your phone, one screen at a time like Discord mobile
+- **iPhone web app**: no App Store, no sideloading, free – it connects through a friend's desktop app
+  (see [iPhone](#iphone))
 
 <p align="center"><img src="docs/screenshots/settings.png" width="720" alt="Voice settings with AI noise suppression"></p>
 
@@ -59,6 +62,8 @@ Download the file for your system from the
 | Linux (manual) | `P2Pcord-linux-x64-<version>.zip` | ✅ tested |
 | Windows 10/11 (x64) | `P2Pcord-win32-x64-<version>.zip` | ⚠️ experimental, unsigned |
 | macOS (Apple Silicon) | `P2Pcord-darwin-arm64-<version>.zip` | ⚠️ experimental, unsigned |
+| Android 10+ | `P2Pcord-<version>-android-arm64-v8a.apk` (older phones: `armeabi-v7a`) | 🧪 new |
+| iPhone / iPad | web app: [louiswalder6.gitlab.io/p2pcord](https://louiswalder6.gitlab.io/p2pcord/) | 🧪 new, needs a bridge |
 
 ### Linux – AppImage
 
@@ -126,6 +131,41 @@ and the `p2pcord` command. Once it is on the AUR, `yay -S p2pcord-bin` will do t
    ```
 3. Start it; allow microphone, camera and screen recording when asked.
 
+### Android
+
+1. Download `P2Pcord-<version>-android-arm64-v8a.apk` on your phone (almost every phone from the last
+   years; very old ones need `armeabi-v7a`) and open it.
+2. Android asks whether your browser may install apps – allow it once. The APK is signed with the
+   P2Pcord release key, so later versions install over it and keep your data.
+3. Allow the microphone (and camera, notifications) when P2Pcord asks.
+
+It is the same P2P app as on the desktop: your identity lives on the phone, protected by the Android
+Keystore. During a call a notification keeps it running in the background. Without a call Android may
+stop the app after a while in the background, then you are offline until you open it again. Screen
+sharing is not available on Android yet; watching streams is. The app checks GitHub for new versions
+on start and shows a notice with the download.
+
+### iPhone
+
+iPhones cannot join a P2P network in the background, and apps outside the App Store cost money or need
+sideloading. P2Pcord therefore runs as a **web app** on iPhones and borrows a friend's desktop app as a
+**bridge**:
+
+1. A friend opens P2Pcord on their PC: ⚙ → **iPhone bridge** → *Create code* → *Copy link* and sends you
+   the link.
+2. Open the link in **Safari**, tap **Share → Add to Home Screen**, then start P2Pcord from the home screen.
+3. Pick a name – done. The web app finds your friend's app through public Nostr relays and connects to it
+   directly (WebRTC, end-to-end encrypted).
+
+- Your account (key pair, groups) is stored on your iPhone. On the bridge it is only kept encrypted with a
+  key that never leaves your phone, and it moves with you: codes from several friends work with the same
+  account, the first bridge that is online wins.
+- Calls go **directly** from your iPhone to the others; only the call setup passes the bridge.
+- **Limits:** at least one friend with a bridge must have P2Pcord open on their PC. iOS suspends web apps
+  in the background, so there are no calls with a locked screen and no push notifications. No screen
+  sharing on iOS; attachments up to 25 MB. Make a backup under ⚙ → *Web app & bridges* – deleting the
+  web app deletes the account.
+
 ### First start
 
 1. Pick a display name. A key pair is created on your device – that is your identity. No account, no password.
@@ -160,6 +200,20 @@ and the `p2pcord` command. Once it is on the AUR, `yay -S p2pcord-bin` will do t
   Start it with `--no-updates` to turn that off.
 - The code has **not been audited** by a third party.
 
+**iPhone bridge** – what the friend who runs the bridge can and cannot do:
+
+- The phone and the bridge find each other through public **Nostr relays** (`relay.damus.io`,
+  `relay.primal.net`, `nostr.mom`, `relay.snort.social`, `offchain.pub`). The relays only see a random
+  topic and ciphertext: offer and answer are sealed with AES-GCM using a key derived from the bridge code,
+  and they carry the DTLS fingerprints, so the WebRTC data channel is end-to-end encrypted between exactly
+  the phone and the bridge.
+- While the phone is connected, its backend runs **on the bridge**: the bridge's app has the account key in
+  memory and sees the phone's messages in plain text, like a server you trust. Only use bridges of friends.
+- At rest the bridge stores the guest's identity and group list sealed with the phone's vault key, which
+  it never writes to disk. Revoking a code deletes everything the guest stored there.
+- Calls stay end-to-end between the phone and the other participants (DTLS-SRTP); the bridge relays the
+  call setup and could in theory tamper with it.
+
 ## Noise suppression
 
 Measured inside the app (offline rendering, clean speech plus noise from the DeepFilterNet repository):
@@ -185,6 +239,10 @@ Renderer (Svelte, sandboxed)  ──IPC──  Electron main (thin shell)  ─�
 | Group logic | `workers/space.js` | Encrypted Autobase per group or DM; `apply()` enforces membership and roles deterministically on every peer |
 | Backend | `workers/app.js` | Identity, groups, key rotation, files, RPC |
 | Presence | `workers/presence.js` | Protomux channel: online state, voice state, WebRTC signaling |
+| iPhone guests | `workers/guests.js` | Backends of bridged iPhones, each with its own identity and swarm |
+| Platform bridges | `renderer/src/lib/bridges/` | The same UI on Electron, Android (WebView) and the web app |
+| Bridge link | `renderer/src/lib/bridges/{nostr,tunnel,web.svelte}.ts`, `lib/bridge-host.svelte.ts` | Nostr signaling, sealed offer/answer, data channel framing |
+| Android | `android/` | Java shell: Bare Kit worklet, WebView, Keystore vault, call service |
 | Vault | `workers/vault.js` | At-rest encryption of local secrets |
 | Schema | `schema.js` → `spec/` | HyperSchema / HyperDB / HyperDispatch (generated) |
 | Calls | `renderer/src/lib/voice/` | Mesh peer connections (perfect negotiation), mic chain, Opus tuning |
@@ -211,8 +269,16 @@ npm start                           # builds the UI and starts the app
 | `npm run make:win` | Windows zip (also works as a cross-build from Linux) |
 | `node scripts/release-sums.mjs` | Signed `SHA256SUMS` + `SHA256SUMS.sig` for a release (needs the release key) |
 | `npx electron-forge make --targets @electron-forge/maker-zip` | macOS zip (run on a Mac) |
+| `npm run android` | Android APKs in `out/make/android/` (needs the Android SDK and JDK 17+) |
+| `npm run build:web` | iPhone web app in `renderer/dist-web/` (GitLab CI publishes it to Pages) |
 
 Testing without speakers or a real microphone: `P2PCORD_FAKE_MEDIA=1 npm run start:peer -- /tmp/a`.
+
+**Android:** `npm run android` downloads the pinned Bare Kit runtime once (~400 MB, cached in
+`~/.cache/p2pcord`), bundles `workers/mobile.js` with `bare-pack`, links the native addons with
+`bare-link` and runs Gradle. `npm run android:debug -- --abi x86_64` builds a debug APK for the emulator;
+the WebView can then be inspected via `chrome://inspect`. Release APKs are signed when
+`android/keystore.properties` exists (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`).
 
 Every push is tested in CI; tagged releases are built on GitHub Actions for Linux, Windows and macOS.
 
@@ -221,7 +287,8 @@ Every push is tested in CI; tagged releases are built on GitHub Actions for Linu
 - Automatic updates for the Windows and macOS builds
 - Global push-to-talk while a game has focus
 - Optional always-on peer (e.g. a Raspberry Pi) for offline delivery
-- Reactions, typing indicator, mobile apps
+- Reactions, typing indicator
+- Android: screen sharing, self-updating APK
 
 ## Made with AI
 

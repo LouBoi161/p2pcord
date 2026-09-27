@@ -27,7 +27,7 @@
   import { settings, saveSettings } from '../lib/settings.svelte'
   import { nameColor } from '../lib/colors'
 
-  let { compact = false, stacked = false }: { compact?: boolean; stacked?: boolean } = $props()
+  let { compact = false, stacked = false, onback }: { compact?: boolean; stacked?: boolean; onback?: () => void } = $props()
 
   let space = $derived(ui.chat ? ui.spaces[ui.chat.space] : undefined)
   let channel = $derived(space?.channels.find((c) => c.id === ui.chat?.channel))
@@ -313,7 +313,9 @@
 >
   {#if space && channel}
     <header>
-      {#if compact}
+      {#if onback}
+        <button class="icon-btn back" title="Zurück" onclick={onback}><Icon name="chevron-left" size={24} /></button>
+      {:else if compact}
         <!-- next to a call the chat is the right panel: this button folds the chat itself -->
         <button class="icon-btn fold-side" title="Chat einklappen" onclick={() => { settings.callChat = false; saveSettings() }}>
           <Icon name="panel-right" size={18} />

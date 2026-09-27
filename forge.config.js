@@ -14,7 +14,8 @@ const IGNORE = [
   /^\/\.git/,
   /^\/README(\.de)?\.md$/,
   /^\/CHANGELOG\.md$/,
-  /^\/(design|docs|packaging|\.github)(\/|$)/,
+  /^\/(design|docs|packaging|android|\.github)(\/|$)/,
+  /^\/renderer\/(dist-web|web)(\/|$)/,
   /^\/\.gitlab-ci\.yml$/,
   /^\/-/ // stray files from mistyped shell commands
 ]

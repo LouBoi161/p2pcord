@@ -6,3 +6,16 @@ test:
     - npm test
   rules:
     - if: $CI_PIPELINE_SOURCE =~ /^(push|merge_request_event|web|api)$/
+
+# The iPhone web app on GitLab Pages: https://louiswalder6.gitlab.io/p2pcord/
+pages:
+  image: node:24
+  script:
+    - npm ci --ignore-scripts
+    - npm run build:web
+    - rm -rf public && mv renderer/dist-web public
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE =~ /^(push|web|api)$/

@@ -2,7 +2,7 @@
 // the Noise-authenticated Hyperswarm connection, so the DTLS fingerprints are
 // bound to the peers' identities: media is end-to-end encrypted and cannot be
 // intercepted by a man in the middle. No signaling server is involved.
-import { call as rpc, on } from '../rpc'
+import { call as rpc, on, bridge } from '../rpc'
 import { ui, toast, errorText, KIND_DM, type Voice } from '../state.svelte'
 import { settings, saveSettings, iceServers } from '../settings.svelte'
 import { Mic, dbfs, playSound, createSuppressor } from './audio'
@@ -612,8 +612,8 @@ let screenAudioLinked = false
 
 // Linux: system audio comes from venmic's virtual microphone
 async function linuxStreamAudio (app: string | null): Promise<MediaStreamTrack | null> {
-  if (!(await window.p2p.streamAudio.available())) return null
-  if (!(await window.p2p.streamAudio.start(app))) return null
+  if (!(await bridge.streamAudio.available())) return null
+  if (!(await bridge.streamAudio.start(app))) return null
   screenAudioLinked = true
   let device: MediaDeviceInfo | undefined
   for (let i = 0; i < 10 && !device; i++) {
@@ -632,7 +632,7 @@ async function linuxStreamAudio (app: string | null): Promise<MediaStreamTrack |
       sampleRate: 48000
     }
   })
-  await window.p2p.streamAudio.unmute()
+  await bridge.streamAudio.unmute()
   return stream.getAudioTracks()[0] || null
 }
 
@@ -641,9 +641,9 @@ async function linuxStreamAudio (app: string | null): Promise<MediaStreamTrack |
 export async function startScreen (sourceId: string | null, opts: ScreenOptions = { audio: settings.streamAudio }) {
   if (!voice.active) return
   const preset = SCREEN_PRESETS[settings.screenQuality] || SCREEN_PRESETS['1080p30']
-  const platform = window.p2p.info().platform
+  const platform = bridge.info().platform
   try {
-    await window.p2p.selectScreen(sourceId)
+    await bridge.selectScreen(sourceId)
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: { width: { max: preset.long }, height: { max: preset.long }, frameRate: { ideal: preset.frameRate, max: preset.frameRate } },
       // Windows: system loopback, without our own call audio where Chromium supports that
@@ -664,7 +664,7 @@ export async function startScreen (sourceId: string | null, opts: ScreenOptions 
     }
     beginScreen(stream)
   } catch (err) {
-    if (screenAudioLinked) window.p2p.streamAudio.stop()
+    if (screenAudioLinked) bridge.streamAudio.stop()
     screenAudioLinked = false
     if ((err as Error)?.name !== 'NotAllowedError') toast('Bildschirmübertragung fehlgeschlagen: ' + errorText(err), 'error')
   }
@@ -696,7 +696,7 @@ export function stopScreen (announce = true) {
   voice.screen = null
   voice.screenHasAudio = false
   voice.viewers = {}
-  if (screenAudioLinked) window.p2p.streamAudio.stop()
+  if (screenAudioLinked) bridge.streamAudio.stop()
   screenAudioLinked = false
   renegotiateAll('screen', null)
   if (announce) {
@@ -829,4 +829,4 @@ export function initVoice () {
 }
 
 // Debug handle for automated tests (dev builds started with P2PCORD_DEBUG_PORT only)
-if (window.p2p.info().debug) (window as any).__p2pVoice = { links, voice, mic, createSuppressor, ui, settings, beginScreen, watchStream, setStreamQuality }
+if (bridge.info().debug) (window as any).__p2pVoice = { links, voice, mic, createSuppressor, ui, settings, beginScreen, watchStream, setStreamQuality }

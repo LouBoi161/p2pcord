@@ -70,7 +70,7 @@ function streamItems (identity: string): MenuEntry[] {
   return [
     { type: 'header', label: 'Stream' },
     { label: watching ? 'Nicht mehr zuschauen' : 'Stream ansehen', icon: watching ? 'eye-off' : 'eye', action: () => watchStream(identity, !watching) },
-    watching && { label: 'In eigenem Fenster öffnen', icon: 'external-link', action: () => popOut(identity) },
+    watching && !bridge.info().mobile && { label: 'In eigenem Fenster öffnen', icon: 'external-link', action: () => popOut(identity) },
     watching && {
       type: 'sub',
       label: 'Qualität für mich',

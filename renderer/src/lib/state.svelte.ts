@@ -1,5 +1,5 @@
 // Global UI state mirrored from the backend, plus the actions that change it.
-import { call, on, start } from './rpc'
+import { call, on, start, bridge } from './rpc'
 import { settings } from './settings.svelte'
 
 export const KIND_GROUP = 0
@@ -86,12 +86,13 @@ export const ui = $state({
   me: '',
   name: '',
   loadingSpaces: 0,
-  vault: 'none' as 'keyring' | 'weak' | 'none',
+  vault: 'none' as 'keyring' | 'weak' | 'none' | 'bridge',
   spaces: {} as Record<string, Space>,
   order: [] as string[],
   peers: {} as Record<string, Peer>,
   view: 'home' as string, // 'home' or a group space id
   chat: null as { space: string; channel: string } | null,
+  pane: 'nav' as 'nav' | 'chat' | 'call', // phones: which screen is shown
   lastChannel: {} as Record<string, string>,
   reads: loadReads(),
   joining: [] as string[],
@@ -246,7 +247,7 @@ export function openView (view: string) {
   if (view === 'home') {
     if (ui.chat && ui.spaces[ui.chat.space]?.kind === KIND_DM) return
     const first = dms()[0]
-    if (first) openDm(first.id)
+    if (first) openDm(first.id, false)
     else ui.chat = null
     return
   }
@@ -261,15 +262,18 @@ export function openView (view: string) {
 export function openChannel (space: string, channel: string) {
   ui.lastChannel[space] = channel
   ui.chat = { space, channel }
+  ui.pane = 'chat'
   loadMessages(space, channel)
 }
 
-export function openDm (space: string) {
+// show: switch to the chat on phones (false when opened automatically)
+export function openDm (space: string, show = true) {
   const s = ui.spaces[space]
   const channel = s?.channels.find((c) => c.kind === TEXT)
   if (!channel) return
   ui.view = 'home'
   ui.chat = { space, channel: channel.id }
+  if (show) ui.pane = 'chat'
   loadMessages(space, channel.id)
 }
 
@@ -324,23 +328,32 @@ function onSpace (state: Space) {
     const key = chatKey(state.id, ch.id)
     const open = ui.chat && ui.chat.space === state.id && ui.chat.channel === ch.id
     if (ui.messages[key] || open) loadMessages(state.id, ch.id)
-    if (prev && ch.latest.author !== ui.me && (!open || !document.hasFocus())) notify(state, ch)
+    if (prev && ch.latest.author !== ui.me && (!open || !focused())) notify(state, ch)
   }
 
   if (ui.chat && ui.chat.space === state.id && !state.channels.some((c) => c.id === ui.chat!.channel)) {
     openView(ui.view)
   }
   // Nothing open on the home screen yet: show the newest conversation
-  if (ui.status === 'ready' && ui.view === 'home' && !ui.chat && state.kind === KIND_DM) openDm(state.id)
+  if (ui.status === 'ready' && ui.view === 'home' && !ui.chat && state.kind === KIND_DM) openDm(state.id, false)
+}
+
+// Phones: a visible app counts as focused (there is no window focus there)
+function focused () {
+  return bridge.info().mobile ? document.visibilityState === 'visible' : document.hasFocus()
 }
 
 function notify (space: Space, channel: Channel) {
   if (settings.mutedChats[space.id] || settings.mutedChats[space.id + ':' + channel.id]) return
   if (settings.sounds && notifySound) notifySound(space.kind === KIND_DM ? 'dm' : 'message')
-  if (!settings.notifications || document.hasFocus()) return
+  if (!settings.notifications || focused()) return
   try {
     const who = memberName(space, channel.latest!.author)
     const where = space.kind === KIND_DM ? who : `${space.name} · #${channel.name}`
+    if (bridge.notify) {
+      bridge.notify(where, space.kind === KIND_DM ? 'Neue Nachricht' : `${who}: Neue Nachricht`)
+      return
+    }
     const n = new Notification(where, { body: space.kind === KIND_DM ? 'Neue Nachricht' : `${who}: Neue Nachricht`, silent: true })
     n.onclick = () => {
       window.focus()

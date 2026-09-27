@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- **Android app**: the full P2P app on the phone (the same backend in a Bare Kit worklet, the same UI in a
+  WebView), one screen at a time like Discord mobile, back button, notifications for new messages, a call
+  keeps running in the background, local data sealed with a key from the Android Keystore, attachments are
+  saved to *Downloads/P2Pcord*; APKs for arm64, armv7 and x86_64, signed with the release key
+- **iPhone web app** on GitLab Pages (add it to the home screen): it connects through a friend's desktop app
+  (*⚙ → iPhone bridge*), found via public Nostr relays and linked by an end-to-end encrypted WebRTC data
+  channel. The account stays on the iPhone and is only kept sealed on the bridge; several bridges work with
+  the same account; calls go directly from the iPhone to the others; account backup and restore
+- Desktop: *iPhone bridge* settings to create, share and revoke bridge codes (revoking deletes what the guest
+  stored)
+- Long press opens the context menus on touch screens; mobile settings as a list with pages
+- Phones default to RNNoise (DeepFilterNet3 stays selectable)
+
 ## v0.2.0
 
 - The AppImage updates itself: new releases are downloaded in the background, verified against the signed

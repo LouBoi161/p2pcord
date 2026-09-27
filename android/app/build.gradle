@@ -1,0 +1,82 @@
+// The backend bundle, linked native addons, the UI and the Bare Kit runtime are
+// produced by scripts/build-android.mjs (npm run android) before Gradle runs.
+plugins {
+  id 'com.android.application'
+}
+
+def pkg = new groovy.json.JsonSlurper().parse(file('../../package.json'))
+def (major, minor, patch) = pkg.version.tokenize('.').collect { it as int }
+
+// Release signing: android/keystore.properties (not in git), see README
+def keystoreFile = rootProject.file('keystore.properties')
+def keystore = new Properties()
+if (keystoreFile.exists()) keystoreFile.withInputStream { keystore.load(it) }
+
+android {
+  namespace 'io.gitlab.louiswalder6.p2pcord'
+  compileSdk 36
+
+  defaultConfig {
+    applicationId 'io.gitlab.louiswalder6.p2pcord'
+    minSdk 29 // Bare Kit
+    targetSdk 36
+    versionCode major * 10000 + minor * 100 + patch
+    versionName pkg.version
+  }
+
+  signingConfigs {
+    release {
+      if (keystore['storeFile']) {
+        storeFile file(keystore['storeFile'])
+        storePassword keystore['storePassword']
+        keyAlias keystore['keyAlias']
+        keyPassword keystore['keyPassword']
+      }
+    }
+  }
+
+  buildTypes {
+    release {
+      minifyEnabled false
+      signingConfig keystore['storeFile'] ? signingConfigs.release : null
+    }
+  }
+
+  // One APK per processor type: the Bare runtime alone is ~60 MB per ABI
+  splits {
+    abi {
+      enable true
+      reset()
+      include(*(findProperty('abis') ?: 'arm64-v8a,armeabi-v7a,x86_64').split(','))
+      universalApk false
+    }
+  }
+
+  sourceSets {
+    main {
+      jniLibs.srcDirs = ['libs/bare-kit/jni', 'jniLibs']
+    }
+  }
+
+  packaging {
+    jniLibs {
+      // compressed in the APK and extracted on install: Bare loads addons by name
+      useLegacyPackaging true
+    }
+  }
+
+  buildFeatures {
+    buildConfig true
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+}
+
+dependencies {
+  implementation files('libs/bare-kit/classes.jar')
+  implementation 'androidx.webkit:webkit:1.15.0'
+  implementation 'androidx.core:core:1.17.0'
+}

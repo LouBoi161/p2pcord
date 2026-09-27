@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Monochrome P2Pcord logo for the status bar: the speech bubble with the two peers cut out -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="24dp"
+  android:height="24dp"
+  android:viewportWidth="512"
+  android:viewportHeight="512">
+  <group
+    android:translateX="-46.4"
+    android:translateY="-22.9"
+    android:scaleX="1.12"
+    android:scaleY="1.12">
+    <path
+      android:fillColor="#FFFFFFFF"
+      android:fillType="evenOdd"
+      android:pathData="M150,214A120,120 0,1 1,212 319V352L150,404Z M208,214a22,22 0,1 0,44 0a22,22 0,1 0,-44 0Z M288,214a22,22 0,1 0,44 0a22,22 0,1 0,-44 0Z M251.5,207H288.5V221H251.5Z" />
+  </group>
+</vector>

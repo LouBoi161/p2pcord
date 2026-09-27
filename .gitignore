@@ -3,3 +3,4 @@ node_modules/
 renderer/dist/
 renderer/public/dfn3/
 *.tmp
+renderer/dist-web/

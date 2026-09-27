@@ -44,6 +44,9 @@ deine Freunde direkt miteinander. Es gibt keinen Server, der ausfallen, gehackt 
   (Windows; Linux über PipeWire)
 - **Zwei Layouts** (wie Discord oder wie TeamSpeak 6), Farbthemes, eigene Farben, Profilbilder,
   Rechtsklick-Menüs überall
+- **Android-App**: die volle P2P-App auf dem Handy, ein Bildschirm nach dem anderen wie bei Discord mobil
+- **iPhone-Web-App**: ohne App Store, ohne Sideloading, kostenlos – sie verbindet sich über die Desktop-App
+  eines Freundes (siehe [iPhone](#iphone))
 
 ## Installation
 
@@ -56,6 +59,8 @@ Lade die passende Datei aus dem [neuesten Release](https://github.com/LouBoi161/
 | Linux (manuell) | `P2Pcord-linux-x64-<version>.zip` | ✅ getestet |
 | Windows 10/11 (x64) | `P2Pcord-win32-x64-<version>.zip` | ⚠️ experimentell, unsigniert |
 | macOS (Apple Silicon) | `P2Pcord-darwin-arm64-<version>.zip` | ⚠️ experimentell, unsigniert |
+| Android 10+ | `P2Pcord-<version>-android-arm64-v8a.apk` (alte Handys: `armeabi-v7a`) | 🧪 neu |
+| iPhone / iPad | Web-App: [louiswalder6.gitlab.io/p2pcord](https://louiswalder6.gitlab.io/p2pcord/) | 🧪 neu, braucht eine Brücke |
 
 ### Linux – AppImage
 
@@ -123,6 +128,41 @@ Startmenü-Eintrag und dem Befehl `p2pcord`. Sobald es im AUR ist, geht das auch
    ```
 3. Starten und Mikrofon, Kamera und Bildschirmaufnahme erlauben.
 
+### Android
+
+1. `P2Pcord-<version>-android-arm64-v8a.apk` auf dem Handy herunterladen (passt für praktisch alle Handys der
+   letzten Jahre; sehr alte brauchen `armeabi-v7a`) und öffnen.
+2. Android fragt, ob dein Browser Apps installieren darf – einmal erlauben. Die APK ist mit dem
+   P2Pcord-Release-Schlüssel signiert, spätere Versionen installieren sich darüber und behalten deine Daten.
+3. Mikrofon (und Kamera, Benachrichtigungen) erlauben, wenn P2Pcord fragt.
+
+Es ist dieselbe P2P-App wie am PC: Deine Identität liegt auf dem Handy, geschützt durch den Android-Keystore.
+Während eines Anrufs hält eine Benachrichtigung die App im Hintergrund am Laufen. Ohne Anruf beendet Android
+die App nach einer Weile im Hintergrund, dann bist du offline, bis du sie wieder öffnest. Bildschirm teilen
+geht auf Android noch nicht, Streams anschauen schon. Beim Start fragt die App GitHub nach neuen Versionen und
+zeigt einen Hinweis mit Download.
+
+### iPhone
+
+iPhones können nicht im Hintergrund in ein P2P-Netz, und Apps außerhalb des App Stores kosten Geld oder
+brauchen Sideloading. Deshalb läuft P2Pcord auf dem iPhone als **Web-App** und nutzt die Desktop-App eines
+Freundes als **Brücke**:
+
+1. Ein Freund öffnet P2Pcord am PC: ⚙ → **iPhone-Brücke** → *Code erstellen* → *Link kopieren* und schickt dir
+   den Link.
+2. Link in **Safari** öffnen, **Teilen → Zum Home-Bildschirm** tippen und P2Pcord vom Home-Bildschirm starten.
+3. Namen wählen – fertig. Die Web-App findet die App deines Freundes über öffentliche Nostr-Relays und
+   verbindet sich direkt mit ihr (WebRTC, Ende-zu-Ende verschlüsselt).
+
+- Dein Konto (Schlüsselpaar, Gruppen) liegt auf deinem iPhone. Auf der Brücke liegt es nur verschlüsselt mit
+  einem Schlüssel, der dein iPhone nie verlässt, und es zieht mit: Codes von mehreren Freunden funktionieren
+  mit demselben Konto, die erste Brücke, die online ist, gewinnt.
+- Anrufe laufen **direkt** von deinem iPhone zu den anderen, nur der Verbindungsaufbau läuft über die Brücke.
+- **Grenzen:** Mindestens ein Freund mit Brücke muss P2Pcord am PC offen haben. iOS beendet Web-Apps im
+  Hintergrund, also keine Anrufe bei gesperrtem Bildschirm und keine Push-Benachrichtigungen. Kein
+  Bildschirm teilen auf iOS, Anhänge bis 25 MB. Mach unter ⚙ → *Web-App & Brücken* eine Sicherung – wer die
+  Web-App löscht, löscht auch das Konto.
+
 ### Erster Start
 
 1. Namen wählen. Auf deinem Gerät entsteht ein Schlüsselpaar – das ist deine Identität. Kein Account, kein Passwort.
@@ -157,6 +197,22 @@ Startmenü-Eintrag und dem Befehl `p2pcord`. Sobald es im AUR ist, geht das auch
   Mit `--no-updates` gestartet, lässt sie das.
 - Der Code wurde **nicht unabhängig geprüft** (kein Audit).
 
+**iPhone-Brücke** – was der Freund, der die Brücke betreibt, kann und was nicht:
+
+- iPhone und Brücke finden sich über öffentliche **Nostr-Relays** (`relay.damus.io`, `relay.primal.net`,
+  `nostr.mom`, `relay.snort.social`, `offchain.pub`). Die sehen nur ein zufälliges Thema und Chiffretext:
+  Angebot und Antwort sind mit AES-GCM und einem aus dem Brücken-Code abgeleiteten Schlüssel versiegelt und
+  enthalten die DTLS-Fingerprints, der WebRTC-Datenkanal ist also Ende-zu-Ende verschlüsselt zwischen genau
+  dem iPhone und der Brücke.
+- Solange das iPhone verbunden ist, läuft sein Backend **auf der Brücke**: Die App dort hat den Kontoschlüssel
+  im Speicher und sieht die Nachrichten des iPhones im Klartext – wie ein Server, dem man vertraut. Nutze nur
+  Brücken von Freunden.
+- Gespeichert liegen Identität und Gruppenliste des Gasts auf der Brücke nur versiegelt mit dem
+  Tresor-Schlüssel des iPhones, den sie nie auf die Platte schreibt. Wird ein Code widerrufen, löscht die
+  Brücke alles, was der Gast dort hatte.
+- Anrufe bleiben Ende-zu-Ende zwischen dem iPhone und den anderen (DTLS-SRTP); die Brücke leitet nur den
+  Verbindungsaufbau weiter und könnte ihn theoretisch manipulieren.
+
 ## Rauschunterdrückung
 
 | Filter | Rosa Rauschen, 10 dB SNR | Echtes Störgeräusch, 5 dB SNR | CPU (Ryzen 7 7800X3D) |
@@ -185,6 +241,8 @@ npm start
 | `npm run make:win` | Windows-ZIP (auch als Cross-Build unter Linux) |
 | `node scripts/release-sums.mjs` | Signierte `SHA256SUMS` + `SHA256SUMS.sig` für ein Release (braucht den Release-Schlüssel) |
 | `npx electron-forge make --targets @electron-forge/maker-zip` | macOS-ZIP (auf einem Mac) |
+| `npm run android` | Android-APKs in `out/make/android/` (braucht Android-SDK und JDK 17+) |
+| `npm run build:web` | iPhone-Web-App in `renderer/dist-web/` (GitLab-CI veröffentlicht sie auf Pages) |
 
 Mehr zu Architektur und Details steht in der [englischen README](README.md#architecture).
 

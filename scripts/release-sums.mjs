@@ -35,7 +35,10 @@ const wanted = new Set([
   `P2Pcord-${version}-x64.AppImage`,
   `P2Pcord-linux-x64-${version}.zip`,
   `P2Pcord-win32-x64-${version}.zip`,
-  `P2Pcord-darwin-arm64-${version}.zip`
+  `P2Pcord-darwin-arm64-${version}.zip`,
+  `P2Pcord-${version}-android-arm64-v8a.apk`,
+  `P2Pcord-${version}-android-armeabi-v7a.apk`,
+  `P2Pcord-${version}-android-x86_64.apk`
 ])
 const files = [...walk(make)].filter((f) => wanted.has(basename(f)))
 files.push(...process.argv.slice(2))

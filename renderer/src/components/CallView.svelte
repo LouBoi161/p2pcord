@@ -22,6 +22,11 @@
   import { userMenu, streamMenu, fullscreenTile } from '../lib/menus'
   import { popped, popOut, closePopout } from '../lib/popout.svelte'
   import { bestGrid } from '../lib/layout'
+  import { bridge } from '../lib/rpc'
+
+  let { onback, onchat }: { onback?: () => void; onchat?: () => void } = $props()
+  const canShare = bridge.info().screenShare
+  const mobile = bridge.info().mobile
 
   let space = $derived(voice.active ? ui.spaces[voice.active.space] : undefined)
   let channel = $derived(space?.channels.find((c) => c.id === voice.active?.channel))
@@ -101,9 +106,13 @@
 
 <section class="call">
   <header>
+    {#if onback}
+      <button class="icon-btn fold" title="Zurück" onclick={onback}><Icon name="chevron-left" size={24} /></button>
+    {:else}
     <button class="icon-btn fold" title={settings.sidebarHidden ? 'Kanalliste einblenden' : 'Kanalliste ausblenden'} onclick={() => { settings.sidebarHidden = !settings.sidebarHidden; saveSettings() }}>
       <Icon name="panel-left" size={18} />
     </button>
+    {/if}
     <Icon name="volume" size={20} />
     <span class="title">{channel?.name || 'Anruf'}</span>
     {#if space}<span class="sub">{space.kind === KIND_DM ? spaceTitle(space) : space.name}</span>{/if}
@@ -112,9 +121,13 @@
     {#if voice.noiseActive !== 'off'}
       <span class="badge ai" title="Hintergrundgeräusche werden lokal auf deinem Gerät entfernt"><Icon name="sparkles" size={12} stroke={2.5} /> <span class="badge-text">{voice.noiseActive === 'dfn3' ? 'KI-Rauschfilter' : 'RNNoise'}</span></span>
     {/if}
-    <button class="icon-btn" class:on={settings.callChat} title={settings.callChat ? 'Chat einklappen' : 'Chat ausklappen'} onclick={() => { settings.callChat = !settings.callChat; saveSettings() }}>
-      <Icon name={settings.callChat ? 'panel-right' : 'chat'} size={18} />
-    </button>
+    {#if onchat}
+      <button class="icon-btn" title="Chat" onclick={onchat}><Icon name="chat" size={20} /></button>
+    {:else}
+      <button class="icon-btn" class:on={settings.callChat} title={settings.callChat ? 'Chat einklappen' : 'Chat ausklappen'} onclick={() => { settings.callChat = !settings.callChat; saveSettings() }}>
+        <Icon name={settings.callChat ? 'panel-right' : 'chat'} size={18} />
+      </button>
+    {/if}
   </header>
 
   <div class="stage" class:focused={!!focused}>
@@ -141,9 +154,11 @@
     <button class="ctl" class:on={!!voice.camera} title={voice.camera ? 'Kamera aus' : 'Kamera an'} onclick={() => (voice.camera ? stopCamera() : startCamera())}>
       <Icon name={voice.camera ? 'video' : 'video-off'} size={22} />
     </button>
-    <button class="ctl" class:on={!!voice.screen} title={voice.screen ? 'Übertragung beenden' : 'Bildschirm teilen'} onclick={pickScreen}>
-      <Icon name={voice.screen ? 'monitor-off' : 'monitor-up'} size={22} />
-    </button>
+    {#if canShare}
+      <button class="ctl" class:on={!!voice.screen} title={voice.screen ? 'Übertragung beenden' : 'Bildschirm teilen'} onclick={pickScreen}>
+        <Icon name={voice.screen ? 'monitor-off' : 'monitor-up'} size={22} />
+      </button>
+    {/if}
     {#if voice.screen && voice.screenHasAudio}
       <button class="ctl" class:off={!voice.screenAudioOn} title={voice.screenAudioOn ? 'Stream-Ton pausieren' : 'Stream-Ton fortsetzen'} onclick={toggleStreamAudio}>
         <Icon name={voice.screenAudioOn ? 'volume' : 'volume-x'} size={22} />
@@ -222,7 +237,7 @@
         <input class="vol" type="range" min="0" max="1" step="0.01" value={settings.streamVolumes[tile.id] ?? 1}
           oninput={(e) => setStreamVolume(tile.id, +(e.target as HTMLInputElement).value)} onchange={saveSettings} title="Stream-Lautstärke" />
         <button class="tool" title="Qualität und mehr" onclick={(e) => streamMenu(e, tile.id)}><Icon name="gauge" size={16} /></button>
-        {#if !out}<button class="tool" title="In eigenem Fenster öffnen" onclick={() => popOut(tile.id)}><Icon name="external-link" size={16} /></button>{/if}
+        {#if !out && !mobile}<button class="tool" title="In eigenem Fenster öffnen" onclick={() => popOut(tile.id)}><Icon name="external-link" size={16} /></button>{/if}
         <button class="tool" title="Vollbild" onclick={() => fullscreenTile(tile.key)}><Icon name="maximize" size={16} /></button>
         <button class="tool" title="Nicht mehr zuschauen" onclick={() => watchStream(tile.id, false)}><Icon name="eye-off" size={16} /></button>
       </div>
