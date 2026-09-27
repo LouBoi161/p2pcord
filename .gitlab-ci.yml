@@ -5,4 +5,4 @@ test:
     - npm ci --ignore-scripts
     - npm test
   rules:
-    - if: $CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_PIPELINE_SOURCE =~ /^(push|merge_request_event|web|api)$/
