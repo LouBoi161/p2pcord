@@ -142,6 +142,13 @@ die App nach einer Weile im Hintergrund, dann bist du offline, bis du sie wieder
 geht auf Android noch nicht, Streams anschauen schon. Beim Start fragt die App GitHub nach neuen Versionen und
 zeigt einen Hinweis mit Download.
 
+**Mit F-Droid** (automatische Updates): <https://louiswalder6.gitlab.io/p2pcord-fdroid/> auf dem Handy öffnen
+und *Repo zu F-Droid hinzufügen* antippen, oder unter *Einstellungen → Paketquellen → +* diese Adresse eintragen:
+
+    https://louiswalder6.gitlab.io/p2pcord-fdroid/repo?fingerprint=2434F7CADD4103F469EC50F3215BEE8436975C777BDD54E9CF58B696FFF20182
+
+Dort liegen dieselben signierten APKs, eine schon installierte App aktualisiert sich also auch über F-Droid.
+
 ### iPhone
 
 iPhones können nicht im Hintergrund in ein P2P-Netz, und Apps außerhalb des App Stores kosten Geld oder

@@ -1,0 +1,23 @@
+Categories:
+  - Internet
+  - Phone & SMS
+License: Apache-2.0
+AuthorName: louis waldhör
+WebSite: https://gitlab.com/louiswalder6/p2pcord
+SourceCode: https://gitlab.com/louiswalder6/p2pcord
+IssueTracker: https://gitlab.com/louiswalder6/p2pcord/-/issues
+Changelog: https://gitlab.com/louiswalder6/p2pcord/-/blob/main/CHANGELOG.md
+
+Summary: Serverloser, Ende-zu-Ende-verschlüsselter Sprach-, Video- und Textchat
+Description: |-
+  P2Pcord ist ein Chat für eine Gruppe von Freunden – wie TeamSpeak oder Discord, aber ohne Server und
+  ohne Konto. Die Geräte verbinden sich direkt miteinander (Holepunch-Stack), alles ist Ende-zu-Ende
+  verschlüsselt.
+
+  * Gruppen mit Text- und Sprachkanälen, Direktnachrichten
+  * Sprach- und Videoanrufe, Bildschirmfreigabe am Desktop
+  * Dateien und Bilder, Reaktionen, Bearbeiten und Löschen
+  * Beitritt per Einladungscode, kein Konto, keine Telefonnummer
+  * Benachrichtigungen im Hintergrund ohne Push-Dienst
+
+  Die App läuft auch unter Linux, Windows und macOS; alle Geräte chatten miteinander.

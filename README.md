@@ -145,6 +145,13 @@ stop the app after a while in the background, then you are offline until you ope
 sharing is not available on Android yet; watching streams is. The app checks GitHub for new versions
 on start and shows a notice with the download.
 
+**With F-Droid** (automatic updates): open <https://louiswalder6.gitlab.io/p2pcord-fdroid/> on the phone and
+tap *Add repository to F-Droid*, or add this address under *Settings → Repositories → +*:
+
+    https://louiswalder6.gitlab.io/p2pcord-fdroid/repo?fingerprint=2434F7CADD4103F469EC50F3215BEE8436975C777BDD54E9CF58B696FFF20182
+
+It carries the same signed APKs, so an app installed from the release page updates through F-Droid too.
+
 ### iPhone
 
 iPhones cannot join a P2P network in the background, and apps outside the App Store cost money or need
