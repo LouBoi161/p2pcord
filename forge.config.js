@@ -8,7 +8,7 @@ const appName = pkg.productName ?? pkg.name
 const IGNORE = [
   /^\/renderer\/(src|public|index\.html|vite\.config\.mjs)/,
   /^\/test/,
-  /^\/scripts/,
+  /^\/(scripts|cli)(\/|$)/,
   /^\/schema\.js$/,
   /^\/out/,
   /^\/\.git/,

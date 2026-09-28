@@ -52,7 +52,9 @@ export class Relays {
   private retry = new Map<string, number>()
   private timers = new Set<ReturnType<typeof setTimeout>>()
 
-  constructor (private urls: string[] = RELAYS) {
+  // no parameter properties here or in tunnel.ts: the headless bridge
+  // (cli/bridge.mjs) runs these files in Node with plain type stripping
+  constructor (urls: string[] = RELAYS) {
     for (const url of urls) this.connect(url)
   }
 

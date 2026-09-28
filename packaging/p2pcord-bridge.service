@@ -1,0 +1,22 @@
+# Headless P2Pcord bridge for iPhones (cli/bridge.mjs) as a systemd user service.
+#
+#   cp packaging/p2pcord-bridge.service ~/.config/systemd/user/
+#   # adjust WorkingDirectory if the repository is not in ~/p2pcord
+#   systemctl --user enable --now p2pcord-bridge
+#   loginctl enable-linger $USER      # keeps it running without a login
+#   journalctl --user -u p2pcord-bridge -f
+#
+# Codes are added and revoked with `node cli/bridge.mjs add|revoke …` while it runs.
+[Unit]
+Description=P2Pcord-Brücke für iPhones
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/p2pcord
+ExecStart=/usr/bin/env node cli/bridge.mjs run
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

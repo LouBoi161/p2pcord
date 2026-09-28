@@ -21,7 +21,8 @@
     "make": "npm run build && electron-forge make --targets pear-electron-forge-maker-appimage && electron-forge make --skip-package --targets @electron-forge/maker-zip",
     "make:win": "npm run build && electron-forge make --platform win32 --targets @electron-forge/maker-zip",
     "android": "npm run build:db && node scripts/build-android.mjs",
-    "android:debug": "npm run build:db && node scripts/build-android.mjs --debug"
+    "android:debug": "npm run build:db && node scripts/build-android.mjs --debug",
+    "bridge": "node cli/bridge.mjs"
   },
   "imports": {
     "events": {
@@ -92,6 +93,7 @@
     "electron-forge-plugin-prune-prebuilds": "^1.0.1",
     "electron-forge-plugin-universal-prebuilds": "^1.0.0",
     "hyperdht": "^6.34.0",
+    "node-datachannel": "^0.33.4",
     "pear-electron-forge-maker-appimage": "^2.0.1",
     "svelte": "^5.57.1",
     "test-tmp": "^1.4.0",

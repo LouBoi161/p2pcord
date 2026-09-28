@@ -131,8 +131,10 @@ export class Pipe {
   private queue: string[] = []
   private nextId = 1
   closed = false
+  private dc: RTCDataChannel
 
-  constructor (private dc: RTCDataChannel) {
+  constructor (dc: RTCDataChannel) {
+    this.dc = dc
     dc.bufferedAmountLowThreshold = HIGH_WATER / 4
     dc.onbufferedamountlow = () => this.flush()
     dc.onmessage = (e) => this.receive(typeof e.data === 'string' ? e.data : '')

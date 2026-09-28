@@ -25,12 +25,14 @@ class Guests {
    * @param {Set<string>} opts.methods RPC methods a guest may call
    * @param {(data: object) => void} opts.emit sends { slot, msg } / { slot, account } to the host UI
    * @param {Array} [opts.bootstrap] DHT bootstrap (tests)
+   * @param {number} [opts.max] guests online at once (the headless bridge allows more)
    */
-  constructor (storage, { methods, emit, bootstrap }) {
+  constructor (storage, { methods, emit, bootstrap, max = MAX_GUESTS }) {
     this.root = path.join(storage, 'guests')
     this.methods = methods
     this.emit = emit
     this.bootstrap = bootstrap
+    this.max = max
     this.apps = new Map() // slot -> App
   }
 
@@ -44,7 +46,7 @@ class Guests {
     const dir = this._dir(slot)
     if (typeof vaultKey !== 'string' || !/^[0-9a-f]{64}$/.test(vaultKey)) throw new Error('BAD_VAULT_KEY')
     if (this.apps.has(slot)) await this.guestClose({ slot })
-    if (this.apps.size >= MAX_GUESTS) throw new Error('BRIDGE_FULL')
+    if (this.apps.size >= this.max) throw new Error('BRIDGE_FULL')
 
     await fs.promises.mkdir(dir, { recursive: true })
     for (const [name, data] of Object.entries(account || {})) {

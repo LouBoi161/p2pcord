@@ -170,6 +170,24 @@ Freundes als **Brücke**:
   Bildschirm teilen auf iOS, Anhänge bis 25 MB. Mach unter ⚙ → *Web-App & Brücken* eine Sicherung – wer die
   Web-App löscht, löscht auch das Konto.
 
+#### Brücke ohne Desktop-App (Server)
+
+Damit die iPhones nicht davon abhängen, dass jemand den PC anhat, läuft die Brücke auch ohne Oberfläche auf
+einem Rechner, der immer an ist (Heimserver, Raspberry Pi, VPS) – nur mit Node.js 22.18+ (x64 oder arm64):
+
+```sh
+git clone https://gitlab.com/louiswalder6/p2pcord.git && cd p2pcord
+npm install --ignore-scripts
+node cli/bridge.mjs add "Lenas iPhone"   # zeigt den Link fürs iPhone
+node cli/bridge.mjs run                  # Brücke starten (Strg+C beendet)
+```
+
+Weitere Befehle: `list`, `revoke <code|name>` (löscht auch alles, was das iPhone dort gespeichert hat). Codes
+lassen sich anlegen und widerrufen, während die Brücke läuft. Daten liegen in `~/.local/share/p2pcord-bridge`
+(`--storage <ordner>`), bis zu 8 iPhones gleichzeitig (`--max-guests <n>`). Keine Portfreigabe nötig. Als
+Dienst mit Autostart: [`packaging/p2pcord-bridge.service`](packaging/p2pcord-bridge.service). Für den
+Server-Betreiber gilt dasselbe wie für jeden Brücken-Betreiber (siehe [Sicherheit](#sicherheit)).
+
 ### Erster Start
 
 1. Namen wählen. Auf deinem Gerät entsteht ein Schlüsselpaar – das ist deine Identität. Kein Account, kein Passwort.

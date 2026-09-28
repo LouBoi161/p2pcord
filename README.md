@@ -173,6 +173,24 @@ sideloading. P2Pcord therefore runs as a **web app** on iPhones and borrows a fr
   sharing on iOS; attachments up to 25 MB. Make a backup under ⚙ → *Web app & bridges* – deleting the
   web app deletes the account.
 
+#### Bridge without the desktop app (server)
+
+So the iPhones do not depend on someone keeping their PC on, the bridge also runs headless on an always-on
+machine (home server, Raspberry Pi, VPS) – all it needs is Node.js 22.18+ (x64 or arm64):
+
+```sh
+git clone https://gitlab.com/louiswalder6/p2pcord.git && cd p2pcord
+npm install --ignore-scripts
+node cli/bridge.mjs add "Lena's iPhone"  # prints the link for the iPhone
+node cli/bridge.mjs run                  # start the bridge (Ctrl+C stops it)
+```
+
+More commands: `list`, `revoke <code|name>` (also deletes everything the iPhone stored there). Codes can be
+added and revoked while the bridge runs. Data lives in `~/.local/share/p2pcord-bridge` (`--storage <dir>`),
+up to 8 iPhones at once (`--max-guests <n>`). No port forwarding needed. As a service with autostart:
+[`packaging/p2pcord-bridge.service`](packaging/p2pcord-bridge.service). Whoever runs the server is in the
+same position as any bridge operator (see [Security](#security)).
+
 ### First start
 
 1. Pick a display name. A key pair is created on your device – that is your identity. No account, no password.
@@ -254,6 +272,7 @@ Renderer (Svelte, sandboxed)  ──IPC──  Electron main (thin shell)  ─�
 | iPhone guests | `workers/guests.js` | Backends of bridged iPhones, each with its own identity and swarm |
 | Platform bridges | `renderer/src/lib/bridges/` | The same UI on Electron, Android (WebView) and the web app |
 | Bridge link | `renderer/src/lib/bridges/{nostr,tunnel,web.svelte}.ts`, `lib/bridge-host.svelte.ts` | Nostr signaling, sealed offer/answer, data channel framing |
+| Headless bridge | `cli/bridge.mjs` | The desktop's bridge host for servers: Node + `node-datachannel`, reuses `nostr.ts`/`tunnel.ts` |
 | Android | `android/` | Java shell: Bare Kit worklet, WebView, Keystore vault, call service |
 | Vault | `workers/vault.js` | At-rest encryption of local secrets |
 | Schema | `schema.js` → `spec/` | HyperSchema / HyperDB / HyperDispatch (generated) |
